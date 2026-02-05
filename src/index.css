@@ -1,0 +1,475 @@
+:root {
+  --splunk-green: #65A637;
+  --splunk-dark: #1a1a1a;
+  --splunk-gray: #333;
+  --border-color: #444;
+  --text-primary: #fff;
+  --text-secondary: #aaa;
+  --header-height: 60px;
+}
+
+* {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+html, body, #root {
+  height: 100%;
+  overflow: hidden;
+}
+
+body {
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, sans-serif;
+  background-color: var(--splunk-dark);
+  color: var(--text-primary);
+  line-height: 1.5;
+}
+
+.app {
+  height: 100vh;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.header {
+  background-color: var(--splunk-gray);
+  padding: 0 1.5rem;
+  height: var(--header-height);
+  border-bottom: 1px solid var(--border-color);
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  flex-shrink: 0;
+}
+
+.header h1 {
+  font-size: 1.25rem;
+  color: var(--splunk-green);
+}
+
+.header nav {
+  display: flex;
+  gap: 0.5rem;
+}
+
+.header button {
+  background: transparent;
+  border: 1px solid var(--border-color);
+  color: var(--text-primary);
+  padding: 0.5rem 1rem;
+  border-radius: 4px;
+  cursor: pointer;
+  transition: all 0.2s;
+  font-size: 0.875rem;
+}
+
+.header button:hover,
+.header button.active {
+  background-color: var(--splunk-green);
+  border-color: var(--splunk-green);
+}
+
+.header button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.main {
+  flex: 1;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+}
+
+/* Files view - full height */
+.files-view {
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  padding: 1rem;
+  gap: 1rem;
+  overflow: hidden;
+}
+
+/* Welcome page - centered with max-width */
+.welcome {
+  text-align: center;
+  max-width: 900px;
+  margin: 2rem auto;
+  padding: 0 2rem;
+}
+
+.welcome h2 {
+  color: var(--splunk-green);
+  margin-bottom: 0.5rem;
+  font-size: 2rem;
+}
+
+.welcome > p {
+  color: var(--text-secondary);
+  margin-bottom: 2rem;
+  font-size: 1.1rem;
+}
+
+.welcome-cards {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 1.5rem;
+  margin-bottom: 2rem;
+}
+
+.welcome-card {
+  background-color: var(--splunk-gray);
+  border-radius: 8px;
+  padding: 2rem;
+  cursor: pointer;
+  transition: all 0.2s;
+  border: 2px solid transparent;
+}
+
+.welcome-card:hover {
+  border-color: var(--splunk-green);
+  transform: translateY(-2px);
+}
+
+.card-icon {
+  font-size: 3rem;
+  margin-bottom: 1rem;
+}
+
+.welcome-card h3 {
+  margin-bottom: 0.5rem;
+}
+
+.welcome-card p {
+  color: var(--text-secondary);
+  font-size: 0.875rem;
+}
+
+.welcome-features {
+  background-color: var(--splunk-gray);
+  border-radius: 8px;
+  padding: 1.5rem;
+  text-align: left;
+}
+
+.welcome-features h3 {
+  color: var(--splunk-green);
+  margin-bottom: 1rem;
+}
+
+.welcome-features ul {
+  list-style: none;
+  padding: 0;
+}
+
+.welcome-features li {
+  padding: 0.5rem 0;
+  border-bottom: 1px solid var(--border-color);
+}
+
+.welcome-features li:last-child {
+  border-bottom: none;
+}
+
+/* Wizard - centered with max-width */
+.wizard {
+  background-color: var(--splunk-gray);
+  border-radius: 8px;
+  padding: 2rem;
+  max-width: 900px;
+  margin: 2rem auto;
+  width: calc(100% - 4rem);
+}
+
+.wizard-steps {
+  display: flex;
+  gap: 1rem;
+  margin-bottom: 2rem;
+  border-bottom: 1px solid var(--border-color);
+  padding-bottom: 1rem;
+}
+
+.wizard-step {
+  padding: 0.5rem 1rem;
+  border-radius: 4px;
+  background: transparent;
+  color: var(--text-secondary);
+  border: none;
+  cursor: pointer;
+}
+
+.wizard-step.active {
+  background-color: var(--splunk-green);
+  color: var(--text-primary);
+}
+
+.wizard-step.completed {
+  color: var(--splunk-green);
+}
+
+.form-group {
+  margin-bottom: 1.5rem;
+}
+
+.form-group label {
+  display: block;
+  margin-bottom: 0.5rem;
+  color: var(--text-secondary);
+  font-size: 0.875rem;
+}
+
+.form-group input,
+.form-group textarea {
+  width: 100%;
+  padding: 0.75rem;
+  border: 1px solid var(--border-color);
+  border-radius: 4px;
+  background-color: var(--splunk-dark);
+  color: var(--text-primary);
+  font-size: 1rem;
+}
+
+.form-group input:focus,
+.form-group textarea:focus {
+  outline: none;
+  border-color: var(--splunk-green);
+}
+
+.form-group textarea {
+  min-height: 100px;
+  resize: vertical;
+}
+
+.checkbox-group {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.75rem;
+  background-color: var(--splunk-dark);
+  border-radius: 4px;
+  margin-bottom: 0.5rem;
+}
+
+.checkbox-group input[type="checkbox"] {
+  width: 18px;
+  height: 18px;
+  accent-color: var(--splunk-green);
+}
+
+.color-picker {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+}
+
+.color-picker input[type="color"] {
+  width: 50px;
+  height: 40px;
+  border: none;
+  border-radius: 4px;
+  cursor: pointer;
+}
+
+.color-presets {
+  display: flex;
+  gap: 0.5rem;
+}
+
+.color-preset {
+  width: 30px;
+  height: 30px;
+  border-radius: 4px;
+  border: 2px solid transparent;
+  cursor: pointer;
+}
+
+.color-preset.active {
+  border-color: var(--text-primary);
+}
+
+.nav-preview {
+  margin-top: 1rem;
+  padding: 0.5rem 1rem;
+  border-radius: 4px;
+  color: white;
+  font-weight: bold;
+}
+
+.wizard-actions {
+  display: flex;
+  justify-content: space-between;
+  margin-top: 2rem;
+  padding-top: 1rem;
+  border-top: 1px solid var(--border-color);
+}
+
+.btn {
+  padding: 0.75rem 1.5rem;
+  border-radius: 4px;
+  font-size: 1rem;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.btn-primary {
+  background-color: var(--splunk-green);
+  border: none;
+  color: white;
+}
+
+.btn-primary:hover {
+  opacity: 0.9;
+}
+
+.btn-secondary {
+  background: transparent;
+  border: 1px solid var(--border-color);
+  color: var(--text-primary);
+}
+
+.btn-secondary:hover {
+  border-color: var(--text-primary);
+}
+
+.btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.review-section {
+  margin-bottom: 1.5rem;
+}
+
+.review-section h3 {
+  color: var(--splunk-green);
+  margin-bottom: 0.5rem;
+}
+
+.review-item {
+  display: flex;
+  padding: 0.5rem 0;
+  border-bottom: 1px solid var(--border-color);
+}
+
+.review-item .label {
+  width: 150px;
+  color: var(--text-secondary);
+}
+
+.review-item .value {
+  flex: 1;
+}
+
+.code-preview {
+  background-color: var(--splunk-dark);
+  border: 1px solid var(--border-color);
+  border-radius: 4px;
+  padding: 1rem;
+  overflow-x: auto;
+  font-family: 'Monaco', 'Menlo', monospace;
+  font-size: 0.875rem;
+  max-height: 300px;
+  overflow-y: auto;
+}
+
+/* File browser - takes full available height */
+.file-browser {
+  display: flex;
+  gap: 1rem;
+  flex: 1;
+  min-height: 0; /* Important for flex child overflow */
+}
+
+.file-tree {
+  width: 280px;
+  min-width: 200px;
+  background-color: var(--splunk-gray);
+  border-radius: 4px;
+  padding: 0.5rem;
+  overflow-y: auto;
+  font-size: 0.875rem;
+}
+
+.file-tree-item {
+  padding: 0.35rem 0.5rem;
+  cursor: pointer;
+  border-radius: 4px;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  user-select: none;
+}
+
+.file-tree-item:hover {
+  background-color: var(--splunk-dark);
+}
+
+.file-tree-item.selected {
+  background-color: var(--splunk-green);
+}
+
+.file-tree-item.directory {
+  color: var(--splunk-green);
+}
+
+.file-content {
+  flex: 1;
+  background-color: #1e1e1e;
+  border-radius: 4px;
+  overflow: hidden;
+  min-width: 0; /* Important for flex child overflow */
+}
+
+.success-message {
+  background-color: rgba(101, 166, 55, 0.2);
+  border: 1px solid var(--splunk-green);
+  border-radius: 4px;
+  padding: 0.75rem 1rem;
+  text-align: center;
+  flex-shrink: 0;
+  margin-bottom: 1rem;
+}
+
+.editor-toolbar {
+  display: flex;
+  gap: 0.5rem;
+  flex-shrink: 0;
+}
+
+/* Import/Export view */
+.import-export {
+  max-width: 800px;
+  margin: 2rem auto;
+  padding: 0 2rem;
+}
+
+/* Responsive adjustments */
+@media (max-width: 768px) {
+  .welcome-cards {
+    grid-template-columns: 1fr;
+  }
+
+  .header {
+    flex-direction: column;
+    height: auto;
+    padding: 1rem;
+    gap: 1rem;
+  }
+
+  .header nav {
+    flex-wrap: wrap;
+    justify-content: center;
+  }
+
+  .file-browser {
+    flex-direction: column;
+  }
+
+  .file-tree {
+    width: 100%;
+    max-height: 200px;
+  }
+}
