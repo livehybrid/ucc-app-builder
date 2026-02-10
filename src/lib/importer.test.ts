@@ -134,7 +134,7 @@ label = Test Add-on`,
     expect(lookupFile?.origin).toBe('custom');
   });
 
-  it('should handle binary files with warnings', async () => {
+  it('should import binary files as base64', async () => {
     const zipFile = await createMockZip({
       'my_app/globalConfig.json': '{}',
       'my_app/static/logo.png': 'fake binary data',
@@ -142,7 +142,11 @@ label = Test Add-on`,
 
     const analysis = await importAppFromZip(zipFile);
 
-    expect(analysis.warnings.some(w => w.includes('Binary file skipped'))).toBe(true);
+    // Binary files should now be included, not skipped
+    const pngFile = analysis.files.find(f => f.path.endsWith('logo.png'));
+    expect(pngFile).toBeDefined();
+    expect(pngFile!.content).toBeTruthy(); // base64 encoded
+    expect(analysis.warnings.some(w => w.includes('Binary file skipped'))).toBe(false);
   });
 
   it('should handle malformed JSON in globalConfig gracefully', async () => {

@@ -8,6 +8,8 @@ export interface VFSFile {
   path: string;
   content: string;
   language?: string;
+  source: 'generated' | 'user' | 'modified';
+  originalContent?: string;
 }
 
 export interface VFSDirectory {
@@ -20,5 +22,9 @@ export interface VFSDirectory {
 export type VFSNode = VFSFile | VFSDirectory;
 
 export interface VFSSnapshot {
-  files: Array<{ path: string; content: string }>;
+  files: Array<{ 
+    path: string; 
+    content: string;
+    source?: 'generated' | 'user' | 'modified';
+  }>;
 }

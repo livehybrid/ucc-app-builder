@@ -51,7 +51,7 @@ export const DEFAULT_WIZARD_STATE: WizardState = {
   components: DEFAULT_COMPONENTS_CONFIG,
 };
 
-export type WizardStep = 'details' | 'branding' | 'components' | 'review';
+type WizardStep = 'details' | 'branding' | 'components' | 'review';
 
 export const WIZARD_STEPS: { id: WizardStep; label: string }[] = [
   { id: 'details', label: 'App Details' },

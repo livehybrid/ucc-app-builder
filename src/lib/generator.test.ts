@@ -164,6 +164,30 @@ describe('generateSplunkApp', () => {
     expect(vfs.exists('/test_app/package/bin/example_input.py')).toBe(true);
   });
 
+  it('should not create file named "bin" when command filename is empty or reserved', () => {
+    const options: GeneratorOptions = {
+      ...baseOptions,
+      components: {
+        ...DEFAULT_COMPONENTS_CONFIG,
+        commands: [
+          { name: 'mycmd', filename: '', type: 'streaming', chunked: true },
+          { name: 'other', filename: 'bin', type: 'streaming', chunked: true },
+        ],
+      },
+    };
+
+    expect(() => generateSplunkApp(vfs, options)).not.toThrow();
+
+    const binNode = vfs.getNode('/test_app/package/bin');
+    expect(binNode?.type).toBe('directory');
+    expect(vfs.exists('/test_app/package/bin/mycmd.py')).toBe(true);
+    expect(vfs.exists('/test_app/package/bin/other.py')).toBe(true);
+
+    const commandsConf = vfs.readFile('/test_app/package/default/commands.conf');
+    expect(commandsConf).toContain('filename = mycmd.py');
+    expect(commandsConf).toContain('filename = other.py');
+  });
+
   it('should derive appId from name if not provided', () => {
     const options: GeneratorOptions = {
       ...baseOptions,

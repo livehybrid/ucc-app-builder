@@ -16,7 +16,7 @@ export interface BuildStatus {
   completedAt?: string;
 }
 
-export interface ValidationResult {
+interface ValidationResult {
   valid: boolean;
   errors: string[];
   warnings: string[];

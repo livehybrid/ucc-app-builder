@@ -1,5 +1,21 @@
-import { useState } from 'react';
+import { useState, useCallback } from 'react';
+import styled from 'styled-components';
+import Button from '@splunk/react-ui/Button';
+import ControlGroup from '@splunk/react-ui/ControlGroup';
+import Text from '@splunk/react-ui/Text';
+import Select from '@splunk/react-ui/Select';
+import Switch from '@splunk/react-ui/Switch';
+import Heading from '@splunk/react-ui/Heading';
+import TabLayout from '@splunk/react-ui/TabLayout';
+import CollapsiblePanel from '@splunk/react-ui/CollapsiblePanel';
+import Chip from '@splunk/react-ui/Chip';
+import ColumnLayout from '@splunk/react-ui/ColumnLayout';
+import SplunkNumber from '@splunk/react-ui/Number';
 import { EntityBuilder } from './EntityBuilder';
+import Cross from '@splunk/react-icons/Cross';
+import { TemplateGallery } from '../TemplateGallery';
+import type { Template } from '../../types/templates';
+import { applyTemplate } from '../../lib/templateApplicator';
 import {
   createDefaultInputConfig,
   createDefaultCommandConfig,
@@ -7,7 +23,7 @@ import {
   createDefaultAccountConfig,
   createDefaultRestEndpointConfig,
   COMMAND_TYPES,
-  ENTITY_TYPES
+  ENTITY_TYPES,
 } from '../../types/components';
 import type {
   ComponentsConfig,
@@ -17,7 +33,8 @@ import type {
   AccountConfig,
   RestEndpointConfig,
   AuthType,
-  EntityType
+  EntityType,
+  LogLevel,
 } from '../../types/components';
 
 interface ComponentsStepProps {
@@ -25,91 +42,149 @@ interface ComponentsStepProps {
   onChange: (config: ComponentsConfig) => void;
 }
 
-export function ComponentsStep({ config, onChange }: ComponentsStepProps) {
-  const [activeTab, setActiveTab] = useState<'inputs' | 'commands' | 'alerts' | 'auth' | 'rest'>('inputs');
-  const [editingIndex, setEditingIndex] = useState<number | null>(null);
+const ComponentItem = styled.div`
+  margin-bottom: 8px;
+`;
 
-  // --- Modular Inputs Logic ---
+const ComponentHeaderRow = styled.div`
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+`;
+
+const ComponentName = styled.span`
+  font-weight: 600;
+`;
+
+const ComponentId = styled.span`
+  color: #9b9ea3;
+  font-family: 'Splunk Platform Mono', Inconsolata, Consolas, monospace;
+  font-size: 0.85rem;
+  flex: 1;
+`;
+
+const CheckboxGrid = styled.div`
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 8px;
+  margin-top: 16px;
+`;
+
+const MethodChips = styled.div`
+  display: flex;
+  gap: 8px;
+`;
+
+const FieldRow = styled.div`
+  display: flex;
+  gap: 8px;
+  margin-bottom: 8px;
+  align-items: flex-end;
+`;
+
+export function ComponentsStep({ config, onChange }: ComponentsStepProps) {
+  const [activeTab, setActiveTab] = useState('inputs');
+  const [openPanels, setOpenPanels] = useState<Set<string>>(new Set());
+  const [isTemplateGalleryOpen, setIsTemplateGalleryOpen] = useState(false);
+
+  // Handle template selection
+  const handleTemplateSelect = useCallback((template: Template) => {
+    const result = applyTemplate(config, template);
+    onChange(result.config);
+    
+    // Open panels for newly added inputs
+    const newInputCount = result.config.inputs.length;
+    const originalInputCount = config.inputs.length;
+    if (newInputCount > originalInputCount) {
+      setOpenPanels(prev => {
+        const next = new Set(prev);
+        for (let i = originalInputCount; i < newInputCount; i++) {
+          next.add(`input-${i}`);
+        }
+        return next;
+      });
+    }
+  }, [config, onChange]);
+
+  const togglePanel = (key: string) => {
+    setOpenPanels((prev) => {
+      const next = new Set(prev);
+      if (next.has(key)) next.delete(key);
+      else next.add(key);
+      return next;
+    });
+  };
+
+  // --- Modular Inputs ---
   const addInput = () => {
     const newInputs = [...config.inputs, createDefaultInputConfig()];
     onChange({ ...config, inputs: newInputs });
-    setEditingIndex(newInputs.length - 1);
+    setOpenPanels((prev) => new Set([...prev, `input-${newInputs.length - 1}`]));
   };
-
-  const updateInput = (index: number, field: keyof ModularInputConfig, value: any) => {
+  const updateInput = (index: number, field: keyof ModularInputConfig, value: ModularInputConfig[keyof ModularInputConfig]) => {
     const newInputs = [...config.inputs];
     newInputs[index] = { ...newInputs[index], [field]: value };
     onChange({ ...config, inputs: newInputs });
   };
-
   const removeInput = (index: number) => {
     const newInputs = [...config.inputs];
     newInputs.splice(index, 1);
     onChange({ ...config, inputs: newInputs });
-    setEditingIndex(null);
   };
 
-  // --- Custom Commands Logic ---
+  // --- Custom Commands ---
   const addCommand = () => {
     const newCommands = [...config.commands, createDefaultCommandConfig()];
     onChange({ ...config, commands: newCommands });
-    setEditingIndex(newCommands.length - 1);
+    setOpenPanels((prev) => new Set([...prev, `cmd-${newCommands.length - 1}`]));
   };
-
-  const updateCommand = (index: number, field: keyof CustomCommandConfig, value: any) => {
+  const updateCommand = (index: number, field: keyof CustomCommandConfig, value: CustomCommandConfig[keyof CustomCommandConfig]) => {
     const newCommands = [...config.commands];
     newCommands[index] = { ...newCommands[index], [field]: value };
     onChange({ ...config, commands: newCommands });
   };
-
   const removeCommand = (index: number) => {
     const newCommands = [...config.commands];
     newCommands.splice(index, 1);
     onChange({ ...config, commands: newCommands });
-    setEditingIndex(null);
   };
 
-  // --- Alert Actions Logic ---
+  // --- Alert Actions ---
   const addAlertAction = () => {
     const newAlerts = [...config.alertActions, createDefaultAlertActionConfig()];
     onChange({ ...config, alertActions: newAlerts });
-    setEditingIndex(newAlerts.length - 1);
+    setOpenPanels((prev) => new Set([...prev, `alert-${newAlerts.length - 1}`]));
   };
-
-  const updateAlertAction = (index: number, field: keyof AlertActionConfig, value: any) => {
+  const updateAlertAction = (index: number, field: keyof AlertActionConfig, value: AlertActionConfig[keyof AlertActionConfig]) => {
     const newAlerts = [...config.alertActions];
     newAlerts[index] = { ...newAlerts[index], [field]: value };
     onChange({ ...config, alertActions: newAlerts });
   };
-
   const removeAlertAction = (index: number) => {
     const newAlerts = [...config.alertActions];
     newAlerts.splice(index, 1);
     onChange({ ...config, alertActions: newAlerts });
-    setEditingIndex(null);
   };
 
-  // --- Auth/Account Logic ---
+  // --- Auth/Account ---
   const addAccount = () => {
     const newAccounts = [...config.accounts, createDefaultAccountConfig()];
     onChange({ ...config, accounts: newAccounts });
-    setEditingIndex(newAccounts.length - 1);
+    setOpenPanels((prev) => new Set([...prev, `auth-${newAccounts.length - 1}`]));
   };
-
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const updateAccount = (index: number, field: keyof AccountConfig, value: any) => {
     const newAccounts = [...config.accounts];
     newAccounts[index] = { ...newAccounts[index], [field]: value };
     onChange({ ...config, accounts: newAccounts });
   };
-
   const removeAccount = (index: number) => {
     const newAccounts = [...config.accounts];
     newAccounts.splice(index, 1);
     onChange({ ...config, accounts: newAccounts });
-    setEditingIndex(null);
   };
-
-  const updateAccountField = (accountIndex: number, fieldIndex: number, prop: string, value: any) => {
+  const updateAccountField = (accountIndex: number, fieldIndex: number, prop: string, value: string | boolean) => {
     const newAccounts = [...config.accounts];
     const fields = [...newAccounts[accountIndex].fields];
     fields[fieldIndex] = { ...fields[fieldIndex], [prop]: value };
@@ -117,535 +192,580 @@ export function ComponentsStep({ config, onChange }: ComponentsStepProps) {
     onChange({ ...config, accounts: newAccounts });
   };
 
-  // --- REST Endpoints Logic ---
+  // --- REST Endpoints ---
   const addRestEndpoint = () => {
     const newEndpoints = [...config.restEndpoints, createDefaultRestEndpointConfig()];
     onChange({ ...config, restEndpoints: newEndpoints });
-    setEditingIndex(newEndpoints.length - 1);
+    setOpenPanels((prev) => new Set([...prev, `rest-${newEndpoints.length - 1}`]));
   };
-
-  const updateRestEndpoint = (index: number, field: keyof RestEndpointConfig, value: any) => {
+  const updateRestEndpoint = (index: number, field: keyof RestEndpointConfig, value: RestEndpointConfig[keyof RestEndpointConfig]) => {
     const newEndpoints = [...config.restEndpoints];
     newEndpoints[index] = { ...newEndpoints[index], [field]: value };
     onChange({ ...config, restEndpoints: newEndpoints });
   };
-
   const removeRestEndpoint = (index: number) => {
     const newEndpoints = [...config.restEndpoints];
     newEndpoints.splice(index, 1);
     onChange({ ...config, restEndpoints: newEndpoints });
-    setEditingIndex(null);
   };
-
   const toggleRestMethod = (index: number, method: 'GET' | 'POST' | 'PUT' | 'DELETE') => {
     const endpoint = config.restEndpoints[index];
     const methods = new Set(endpoint.methods);
-    if (methods.has(method)) {
-      methods.delete(method);
-    } else {
-      methods.add(method);
-    }
+    if (methods.has(method)) methods.delete(method);
+    else methods.add(method);
     updateRestEndpoint(index, 'methods', Array.from(methods));
   };
 
   return (
-    <div className="components-step">
-      <div className="tabs">
-        <button
-          className={`tab ${activeTab === 'inputs' ? 'active' : ''}`}
-          onClick={() => { setActiveTab('inputs'); setEditingIndex(null); }}
-        >
-          Modular Inputs ({config.inputs.length})
-        </button>
-        <button
-          className={`tab ${activeTab === 'commands' ? 'active' : ''}`}
-          onClick={() => { setActiveTab('commands'); setEditingIndex(null); }}
-        >
-          Commands ({config.commands.length})
-        </button>
-        <button
-          className={`tab ${activeTab === 'alerts' ? 'active' : ''}`}
-          onClick={() => { setActiveTab('alerts'); setEditingIndex(null); }}
-        >
-          Alert Actions ({config.alertActions.length})
-        </button>
-        <button
-          className={`tab ${activeTab === 'auth' ? 'active' : ''}`}
-          onClick={() => { setActiveTab('auth'); setEditingIndex(null); }}
-        >
-          Auth ({config.accounts.length})
-        </button>
-        <button
-          className={`tab ${activeTab === 'rest' ? 'active' : ''}`}
-          onClick={() => { setActiveTab('rest'); setEditingIndex(null); }}
-        >
-          REST ({config.restEndpoints.length})
-        </button>
-      </div>
+    <div>
+      <TabLayout activePanelId={activeTab} onChange={(_e: unknown, { activePanelId }: { activePanelId?: string }) => { if (activePanelId) { setActiveTab(activePanelId); setOpenPanels(new Set()); } }}>
+        {/* Modular Inputs Tab */}
+        <TabLayout.Panel label={`Modular Inputs (${config.inputs.length})`} panelId="inputs">
+          <div style={{ padding: '16px 0' }}>
+            <Heading level={3}>Modular Inputs</Heading>
+            <p style={{ color: '#9b9ea3', fontSize: '0.875rem', marginBottom: 16 }}>
+              Define inputs to collect data from external sources.
+            </p>
 
-      <div className="tab-content">
-        {/* --- Modular Inputs Tab --- */}
-        {activeTab === 'inputs' && (
-          <div className="inputs-config">
-            <h3>Modular Inputs</h3>
-            <p className="help-text">Define inputs to collect data from external sources.</p>
-
-            <div className="component-list">
-              {config.inputs.map((input, index) => (
-                <div key={index} className={`component-item ${editingIndex === index ? 'editing' : ''}`}>
-                  <div className="component-header" onClick={() => setEditingIndex(editingIndex === index ? null : index)}>
-                    <span className="component-name">{input.title || '(Untitled Input)'}</span>
-                    <span className="component-id">{input.name}</span>
-                    <button className="btn-icon danger" onClick={(e) => { e.stopPropagation(); removeInput(index); }}>✕</button>
+            {config.inputs.map((input, index) => (
+              <ComponentItem key={index}>
+                <CollapsiblePanel
+                  title={
+                    <ComponentHeaderRow>
+                      <ComponentName>{input.title || '(Untitled Input)'}</ComponentName>
+                      <ComponentId>{input.name}</ComponentId>
+                    </ComponentHeaderRow>
+                  }
+                  open={openPanels.has(`input-${index}`)}
+                  onChange={() => togglePanel(`input-${index}`)}
+                  actions={
+                    <Button appearance="destructive" icon={<Cross />} onClick={(e: React.MouseEvent) => { e.stopPropagation(); removeInput(index); }} />
+                  }
+                >
+                  <div style={{ padding: '16px 0' }}>
+                    <ControlGroup label="Input Name (Internal ID)" labelPosition="top">
+                      <Text value={input.name} onChange={(_e: unknown, { value }: { value: string }) => updateInput(index, 'name', value)} placeholder="e.g. my_input" />
+                    </ControlGroup>
+                    <ControlGroup label="Display Title" labelPosition="top">
+                      <Text value={input.title} onChange={(_e: unknown, { value }: { value: string }) => updateInput(index, 'title', value)} placeholder="e.g. My Data Input" />
+                    </ControlGroup>
+                    <ControlGroup label="Description" labelPosition="top">
+                      <Text value={input.description || ''} onChange={(_e: unknown, { value }: { value: string }) => updateInput(index, 'description', value)} placeholder="Description shown in UI" />
+                    </ControlGroup>
+                    <EntityBuilder entities={input.entity} onChange={(entities) => updateInput(index, 'entity', entities)} />
                   </div>
+                </CollapsiblePanel>
+              </ComponentItem>
+            ))}
 
-                  {editingIndex === index && (
-                    <div className="component-form">
-                      <div className="form-group">
-                        <label>Input Name (Internal ID)</label>
-                        <input
-                          type="text"
-                          value={input.name}
-                          onChange={(e) => updateInput(index, 'name', e.target.value)}
-                          placeholder="e.g. my_input"
-                        />
-                      </div>
-                      <div className="form-group">
-                        <label>Display Title</label>
-                        <input
-                          type="text"
-                          value={input.title}
-                          onChange={(e) => updateInput(index, 'title', e.target.value)}
-                          placeholder="e.g. My Data Input"
-                        />
-                      </div>
-                      <div className="form-group">
-                        <label>Description</label>
-                        <input
-                          type="text"
-                          value={input.description || ''}
-                          onChange={(e) => updateInput(index, 'description', e.target.value)}
-                          placeholder="Description shown in UI"
-                        />
-                      </div>
-
-                      <EntityBuilder
-                        entities={input.entity}
-                        onChange={(entities) => updateInput(index, 'entity', entities)}
-                      />
-                    </div>
-                  )}
-                </div>
-              ))}
+            <div style={{ display: 'flex', gap: '12px', marginTop: '8px' }}>
+              <Button appearance="primary" onClick={addInput} label="+ Add Modular Input" />
+              <Button 
+                appearance="secondary" 
+                onClick={() => setIsTemplateGalleryOpen(true)} 
+                label="🧰 Use Template"
+              />
             </div>
-
-            <button className="btn btn-primary" onClick={addInput}>+ Add Modular Input</button>
           </div>
-        )}
+        </TabLayout.Panel>
 
-        {/* --- Custom Commands Tab --- */}
-        {activeTab === 'commands' && (
-          <div className="commands-config">
-            <h3>Custom Commands</h3>
-            <p className="help-text">Define custom SPL commands to process data.</p>
+        {/* Template Gallery Modal */}
+        <TemplateGallery
+          isOpen={isTemplateGalleryOpen}
+          onClose={() => setIsTemplateGalleryOpen(false)}
+          onSelectTemplate={handleTemplateSelect}
+        />
 
-            <div className="component-list">
-              {config.commands.map((cmd, index) => (
-                <div key={index} className={`component-item ${editingIndex === index ? 'editing' : ''}`}>
-                  <div className="component-header" onClick={() => setEditingIndex(editingIndex === index ? null : index)}>
-                    <span className="component-name">{cmd.name || '(Untitled Command)'}</span>
-                    <span className="component-id">{cmd.filename}</span>
-                    <button className="btn-icon danger" onClick={(e) => { e.stopPropagation(); removeCommand(index); }}>✕</button>
-                  </div>
+        {/* Custom Commands Tab */}
+        <TabLayout.Panel label={`Commands (${config.commands.length})`} panelId="commands">
+          <div style={{ padding: '16px 0' }}>
+            <Heading level={3}>Custom Commands</Heading>
+            <p style={{ color: '#9b9ea3', fontSize: '0.875rem', marginBottom: 16 }}>
+              Define custom SPL commands to process data.
+            </p>
 
-                  {editingIndex === index && (
-                    <div className="component-form">
-                      <div className="form-row">
-                        <div className="form-group half">
-                          <label>Command Name</label>
-                          <input
-                            type="text"
-                            value={cmd.name}
-                            onChange={(e) => updateCommand(index, 'name', e.target.value)}
-                            placeholder="e.g. mycommand"
-                          />
-                        </div>
-                        <div className="form-group half">
-                          <label>Filename (.py)</label>
-                          <input
-                            type="text"
-                            value={cmd.filename}
-                            onChange={(e) => updateCommand(index, 'filename', e.target.value)}
-                            placeholder="e.g. my_command.py"
-                          />
-                        </div>
-                      </div>
+            {config.commands.map((cmd, index) => (
+              <ComponentItem key={index}>
+                <CollapsiblePanel
+                  title={
+                    <ComponentHeaderRow>
+                      <ComponentName>{cmd.name || '(Untitled Command)'}</ComponentName>
+                      <ComponentId>{cmd.filename}</ComponentId>
+                    </ComponentHeaderRow>
+                  }
+                  open={openPanels.has(`cmd-${index}`)}
+                  onChange={() => togglePanel(`cmd-${index}`)}
+                  actions={
+                    <Button appearance="destructive" icon={<Cross />} onClick={(e: React.MouseEvent) => { e.stopPropagation(); removeCommand(index); }} />
+                  }
+                >
+                  <div style={{ padding: '16px 0' }}>
+                    <ColumnLayout>
+                      <ColumnLayout.Row>
+                        <ColumnLayout.Column span={6}>
+                          <ControlGroup label="Command Name" labelPosition="top">
+                            <Text value={cmd.name} onChange={(_e: unknown, { value }: { value: string }) => updateCommand(index, 'name', value)} placeholder="e.g. mycommand" />
+                          </ControlGroup>
+                        </ColumnLayout.Column>
+                        <ColumnLayout.Column span={6}>
+                          <ControlGroup label="Filename (.py)" labelPosition="top">
+                            <Text value={cmd.filename} onChange={(_e: unknown, { value }: { value: string }) => updateCommand(index, 'filename', value)} placeholder="e.g. my_command.py" />
+                          </ControlGroup>
+                        </ColumnLayout.Column>
+                      </ColumnLayout.Row>
+                    </ColumnLayout>
 
-                      <div className="form-group">
-                        <label>Command Type</label>
-                        <select
-                          value={cmd.type}
-                          onChange={(e) => updateCommand(index, 'type', e.target.value)}
-                        >
-                          {COMMAND_TYPES.map(t => (
-                            <option key={t.type} value={t.type}>{t.label} - {t.description}</option>
-                          ))}
-                        </select>
-                      </div>
-
-                      <div className="checkbox-grid">
-                        <label>
-                          <input
-                            type="checkbox"
-                            checked={cmd.chunked}
-                            onChange={(e) => updateCommand(index, 'chunked', e.target.checked)}
-                          /> Chunked Protocol
-                        </label>
-                        <label>
-                          <input
-                            type="checkbox"
-                            checked={cmd.passauth}
-                            onChange={(e) => updateCommand(index, 'passauth', e.target.checked)}
-                          /> Pass Auth
-                        </label>
-                        <label>
-                          <input
-                            type="checkbox"
-                            checked={cmd.supports_multivalues}
-                            onChange={(e) => updateCommand(index, 'supports_multivalues', e.target.checked)}
-                          /> Multi-values
-                        </label>
-                      </div>
-                    </div>
-                  )}
-                </div>
-              ))}
-            </div>
-
-            <button className="btn btn-primary" onClick={addCommand}>+ Add Custom Command</button>
-          </div>
-        )}
-
-        {/* --- Alert Actions Tab --- */}
-        {activeTab === 'alerts' && (
-          <div className="alerts-config">
-            <h3>Alert Actions</h3>
-            <p className="help-text">Define custom actions that can be triggered by alerts.</p>
-
-            <div className="component-list">
-              {config.alertActions.map((alert, index) => (
-                <div key={index} className={`component-item ${editingIndex === index ? 'editing' : ''}`}>
-                  <div className="component-header" onClick={() => setEditingIndex(editingIndex === index ? null : index)}>
-                    <span className="component-name">{alert.label || '(Untitled Alert)'}</span>
-                    <span className="component-id">{alert.name}</span>
-                    <button className="btn-icon danger" onClick={(e) => { e.stopPropagation(); removeAlertAction(index); }}>✕</button>
-                  </div>
-
-                  {editingIndex === index && (
-                    <div className="component-form">
-                      <div className="form-group">
-                        <label>Alert Action Name</label>
-                        <input
-                          type="text"
-                          value={alert.name}
-                          onChange={(e) => updateAlertAction(index, 'name', e.target.value)}
-                          placeholder="e.g. send_to_service"
-                        />
-                      </div>
-                      <div className="form-group">
-                        <label>Display Label</label>
-                        <input
-                          type="text"
-                          value={alert.label}
-                          onChange={(e) => updateAlertAction(index, 'label', e.target.value)}
-                          placeholder="e.g. Send to Service"
-                        />
-                      </div>
-                      <div className="form-group">
-                        <label>Description</label>
-                        <input
-                          type="text"
-                          value={alert.description || ''}
-                          onChange={(e) => updateAlertAction(index, 'description', e.target.value)}
-                        />
-                      </div>
-
-                      <EntityBuilder
-                        entities={alert.entity}
-                        onChange={(entities) => updateAlertAction(index, 'entity', entities)}
-                      />
-                    </div>
-                  )}
-                </div>
-              ))}
-            </div>
-
-            <button className="btn btn-primary" onClick={addAlertAction}>+ Add Alert Action</button>
-          </div>
-        )}
-
-        {/* --- Authentication Tab --- */}
-        {activeTab === 'auth' && (
-          <div className="auth-config">
-            <h3>Authentication & Accounts</h3>
-            <p className="help-text">Define how users configure credentials for your app.</p>
-
-            <div className="component-list">
-              {config.accounts.map((account, index) => (
-                <div key={index} className={`component-item ${editingIndex === index ? 'editing' : ''}`}>
-                  <div className="component-header" onClick={() => setEditingIndex(editingIndex === index ? null : index)}>
-                    <span className="component-name">{account.name || 'Global Account'}</span>
-                    <span className="component-id">{account.authType}</span>
-                    <button className="btn-icon danger" onClick={(e) => { e.stopPropagation(); removeAccount(index); }}>✕</button>
-                  </div>
-
-                  {editingIndex === index && (
-                    <div className="component-form">
-                      <div className="form-group">
-                        <label>Config Name</label>
-                        <input
-                          type="text"
-                          value={account.name}
-                          onChange={(e) => updateAccount(index, 'name', e.target.value)}
-                          placeholder="e.g. account"
-                        />
-                      </div>
-
-                      <div className="form-group">
-                        <label>Authentication Type</label>
-                        <select
-                          value={account.authType}
-                          onChange={(e) => updateAccount(index, 'authType', e.target.value as AuthType)}
-                        >
-                          <option value="basic">Basic (Username/Password)</option>
-                          <option value="oauth">OAuth 2.0</option>
-                          <option value="apikey">API Key</option>
-                        </select>
-                      </div>
-
-                      {/* We show fields but they are mostly fixed for basic auth, customizable for API key */}
-                      <div className="fields-preview">
-                        <h4>Configuration Fields</h4>
-                        {account.fields.map((field, fIndex) => (
-                          <div key={fIndex} className="field-row">
-                            <input
-                              type="text"
-                              value={field.label}
-                              onChange={(e) => updateAccountField(index, fIndex, 'label', e.target.value)}
-                              placeholder="Label"
-                            />
-                            <select
-                              value={field.type}
-                              onChange={(e) => updateAccountField(index, fIndex, 'type', e.target.value as EntityType)}
-                            >
-                              {ENTITY_TYPES.map(t => <option key={t.type} value={t.type}>{t.label}</option>)}
-                            </select>
-                            <label className="checkbox-inline">
-                              <input
-                                type="checkbox"
-                                checked={field.required}
-                                onChange={(e) => updateAccountField(index, fIndex, 'required', e.target.checked)}
-                              /> Req
-                            </label>
-                          </div>
+                    <ControlGroup label="Command Type" labelPosition="top">
+                      <Select value={cmd.type} onChange={(_e: unknown, { value }: { value: string | number | boolean }) => updateCommand(index, 'type', String(value))}>
+                        {COMMAND_TYPES.map((t) => (
+                          <Select.Option key={t.type} label={`${t.label} - ${t.description}`} value={t.type} />
                         ))}
-                      </div>
+                      </Select>
+                    </ControlGroup>
 
-                      {account.authType === 'oauth' && (
-                        <div className="oauth-config">
-                          <h4>OAuth Configuration</h4>
-                          <div className="form-group">
-                            <label>Redirect URI</label>
-                            <input
-                              type="text"
-                              value={account.oauth?.redirectUri || ''}
-                              onChange={(e) => updateAccount(index, 'oauth', { ...account.oauth, redirectUri: e.target.value })}
-                            />
-                          </div>
-                          {/* Add other OAuth fields */}
-                        </div>
-                      )}
-                    </div>
-                  )}
-                </div>
-              ))}
-            </div>
-
-            <button className="btn btn-primary" onClick={addAccount}>+ Add Account Config</button>
-          </div>
-        )}
-
-        {/* --- REST Endpoints Tab --- */}
-        {activeTab === 'rest' && (
-          <div className="rest-config">
-            <h3>Custom REST Endpoints</h3>
-            <p className="help-text">Define custom API endpoints handled by Python scripts.</p>
-
-            <div className="component-list">
-              {config.restEndpoints.map((endpoint, index) => (
-                <div key={index} className={`component-item ${editingIndex === index ? 'editing' : ''}`}>
-                  <div className="component-header" onClick={() => setEditingIndex(editingIndex === index ? null : index)}>
-                    <span className="component-name">{endpoint.name || '(Untitled Endpoint)'}</span>
-                    <span className="component-id">{endpoint.handlerClass}</span>
-                    <button className="btn-icon danger" onClick={(e) => { e.stopPropagation(); removeRestEndpoint(index); }}>✕</button>
+                    <CheckboxGrid>
+                      <Switch selected={cmd.chunked} onClick={() => updateCommand(index, 'chunked', !cmd.chunked)} appearance="toggle">Chunked Protocol</Switch>
+                      <Switch selected={cmd.passauth} onClick={() => updateCommand(index, 'passauth', !cmd.passauth)} appearance="toggle">Pass Auth</Switch>
+                      <Switch selected={cmd.supports_multivalues} onClick={() => updateCommand(index, 'supports_multivalues', !cmd.supports_multivalues)} appearance="toggle">Multi-values</Switch>
+                    </CheckboxGrid>
                   </div>
+                </CollapsiblePanel>
+              </ComponentItem>
+            ))}
 
-                  {editingIndex === index && (
-                    <div className="component-form">
-                      <div className="form-row">
-                        <div className="form-group half">
-                          <label>Endpoint Name</label>
-                          <input
-                            type="text"
-                            value={endpoint.name}
-                            onChange={(e) => updateRestEndpoint(index, 'name', e.target.value)}
-                            placeholder="e.g. my_endpoint"
-                          />
-                        </div>
-                        <div className="form-group half">
-                          <label>Handler Class</label>
-                          <input
-                            type="text"
-                            value={endpoint.handlerClass}
-                            onChange={(e) => updateRestEndpoint(index, 'handlerClass', e.target.value)}
-                            placeholder="e.g. MyHandler"
-                          />
-                        </div>
-                      </div>
-
-                      <div className="form-group">
-                        <label>Supported Methods</label>
-                        <div className="methods-select">
-                          {(['GET', 'POST', 'PUT', 'DELETE'] as const).map(method => (
-                            <label key={method} className={`method-chip ${endpoint.methods.includes(method) ? 'active' : ''}`}>
-                              <input
-                                type="checkbox"
-                                checked={endpoint.methods.includes(method)}
-                                onChange={() => toggleRestMethod(index, method)}
-                                style={{ display: 'none' }}
-                              />
-                              {method}
-                            </label>
-                          ))}
-                        </div>
-                      </div>
-
-                      <div className="form-group">
-                        <label>
-                          <input
-                            type="checkbox"
-                            checked={endpoint.requiresAuth}
-                            onChange={(e) => updateRestEndpoint(index, 'requiresAuth', e.target.checked)}
-                          /> Require Authentication
-                        </label>
-                      </div>
-                    </div>
-                  )}
-                </div>
-              ))}
-            </div>
-
-            <button className="btn btn-primary" onClick={addRestEndpoint}>+ Add REST Endpoint</button>
+            <Button appearance="primary" onClick={addCommand} label="+ Add Custom Command" />
           </div>
-        )}
-      </div>
+        </TabLayout.Panel>
 
-      <style>{`
-        .components-step {
-          display: flex;
-          flex-direction: column;
-          gap: 1rem;
-        }
-        .tabs {
-          display: flex;
-          gap: 0.5rem;
-          border-bottom: 1px solid var(--border-color);
-          padding-bottom: 0.5rem;
-          overflow-x: auto;
-        }
-        .tab {
-          background: none;
-          border: none;
-          padding: 0.5rem 1rem;
-          color: var(--text-secondary);
-          cursor: pointer;
-          border-radius: 4px;
-          white-space: nowrap;
-        }
-        .tab.active {
-          background-color: var(--splunk-green);
-          color: white;
-        }
-        .component-list {
-          margin-bottom: 1rem;
-        }
-        .component-item {
-          background-color: var(--splunk-gray);
-          border: 1px solid var(--border-color);
-          margin-bottom: 0.5rem;
-          border-radius: 4px;
-        }
-        .component-item.editing {
-          border-color: var(--splunk-green);
-        }
-        .component-header {
-          padding: 1rem;
-          display: flex;
-          align-items: center;
-          cursor: pointer;
-        }
-        .component-name {
-          font-weight: bold;
-          margin-right: 1rem;
-        }
-        .component-id {
-          color: var(--text-secondary);
-          font-family: monospace;
-          flex: 1;
-        }
-        .component-form {
-          padding: 1rem;
-          border-top: 1px solid var(--border-color);
-          background-color: rgba(0,0,0,0.1);
-        }
-        .checkbox-grid {
-          display: grid;
-          grid-template-columns: repeat(2, 1fr);
-          gap: 0.5rem;
-          margin-top: 1rem;
-        }
-        .methods-select {
-          display: flex;
-          gap: 0.5rem;
-        }
-        .method-chip {
-          padding: 0.25rem 0.75rem;
-          border: 1px solid var(--border-color);
-          border-radius: 1rem;
-          cursor: pointer;
-          user-select: none;
-        }
-        .method-chip.active {
-          background-color: var(--splunk-green);
-          border-color: var(--splunk-green);
-          color: white;
-        }
-        .field-row {
-          display: flex;
-          gap: 0.5rem;
-          margin-bottom: 0.5rem;
-          align-items: center;
-        }
-        .field-row input[type="text"] {
-          flex: 1;
-        }
-        .checkbox-inline {
-          display: flex;
-          align-items: center;
-          gap: 0.25rem;
-          white-space: nowrap;
-        }
-      `}</style>
+        {/* Alert Actions Tab */}
+        <TabLayout.Panel label={`Alert Actions (${config.alertActions.length})`} panelId="alerts">
+          <div style={{ padding: '16px 0' }}>
+            <Heading level={3}>Alert Actions</Heading>
+            <p style={{ color: '#9b9ea3', fontSize: '0.875rem', marginBottom: 16 }}>
+              Define custom actions that can be triggered by alerts.
+            </p>
+
+            {config.alertActions.map((alert, index) => (
+              <ComponentItem key={index}>
+                <CollapsiblePanel
+                  title={
+                    <ComponentHeaderRow>
+                      <ComponentName>{alert.label || '(Untitled Alert)'}</ComponentName>
+                      <ComponentId>{alert.name}</ComponentId>
+                    </ComponentHeaderRow>
+                  }
+                  open={openPanels.has(`alert-${index}`)}
+                  onChange={() => togglePanel(`alert-${index}`)}
+                  actions={
+                    <Button appearance="destructive" icon={<Cross />} onClick={(e: React.MouseEvent) => { e.stopPropagation(); removeAlertAction(index); }} />
+                  }
+                >
+                  <div style={{ padding: '16px 0' }}>
+                    <ControlGroup label="Alert Action Name" labelPosition="top">
+                      <Text value={alert.name} onChange={(_e: unknown, { value }: { value: string }) => updateAlertAction(index, 'name', value)} placeholder="e.g. send_to_service" />
+                    </ControlGroup>
+                    <ControlGroup label="Display Label" labelPosition="top">
+                      <Text value={alert.label} onChange={(_e: unknown, { value }: { value: string }) => updateAlertAction(index, 'label', value)} placeholder="e.g. Send to Service" />
+                    </ControlGroup>
+                    <ControlGroup label="Description" labelPosition="top">
+                      <Text value={alert.description || ''} onChange={(_e: unknown, { value }: { value: string }) => updateAlertAction(index, 'description', value)} />
+                    </ControlGroup>
+                    <EntityBuilder entities={alert.entity} onChange={(entities) => updateAlertAction(index, 'entity', entities)} />
+                  </div>
+                </CollapsiblePanel>
+              </ComponentItem>
+            ))}
+
+            <Button appearance="primary" onClick={addAlertAction} label="+ Add Alert Action" />
+          </div>
+        </TabLayout.Panel>
+
+        {/* Authentication Tab */}
+        <TabLayout.Panel label={`Auth (${config.accounts.length})`} panelId="auth">
+          <div style={{ padding: '16px 0' }}>
+            <Heading level={3}>Authentication &amp; Accounts</Heading>
+            <p style={{ color: '#9b9ea3', fontSize: '0.875rem', marginBottom: 16 }}>
+              Define how users configure credentials for your app.
+            </p>
+
+            {config.accounts.map((account, index) => (
+              <ComponentItem key={index}>
+                <CollapsiblePanel
+                  title={
+                    <ComponentHeaderRow>
+                      <ComponentName>{account.name || 'Global Account'}</ComponentName>
+                      <ComponentId>{account.authType}</ComponentId>
+                    </ComponentHeaderRow>
+                  }
+                  open={openPanels.has(`auth-${index}`)}
+                  onChange={() => togglePanel(`auth-${index}`)}
+                  actions={
+                    <Button appearance="destructive" icon={<Cross />} onClick={(e: React.MouseEvent) => { e.stopPropagation(); removeAccount(index); }} />
+                  }
+                >
+                  <div style={{ padding: '16px 0' }}>
+                    <ControlGroup label="Config Name" labelPosition="top">
+                      <Text value={account.name} onChange={(_e: unknown, { value }: { value: string }) => updateAccount(index, 'name', value)} placeholder="e.g. account" />
+                    </ControlGroup>
+
+                    <ControlGroup label="Authentication Type" labelPosition="top">
+                      <Select value={account.authType} onChange={(_e: unknown, { value }: { value: string | number | boolean }) => updateAccount(index, 'authType', String(value) as AuthType)}>
+                        <Select.Option label="Basic (Username/Password)" value="basic" />
+                        <Select.Option label="OAuth 2.0" value="oauth" />
+                        <Select.Option label="API Key" value="apikey" />
+                      </Select>
+                    </ControlGroup>
+
+                    <Heading level={4} style={{ marginTop: 16 }}>Configuration Fields</Heading>
+                    {account.fields.map((field, fIndex) => (
+                      <FieldRow key={fIndex}>
+                        <Text
+                          value={field.label}
+                          onChange={(_e: unknown, { value }: { value: string }) => updateAccountField(index, fIndex, 'label', value)}
+                          placeholder="Label"
+                          style={{ flex: 1 }}
+                        />
+                        <Select
+                          value={field.type}
+                          onChange={(_e: unknown, { value }: { value: string | number | boolean }) => updateAccountField(index, fIndex, 'type', String(value) as EntityType)}
+                          style={{ width: 160 }}
+                        >
+                          {ENTITY_TYPES.map((t) => (
+                            <Select.Option key={t.type} label={t.label} value={t.type} />
+                          ))}
+                        </Select>
+                        <Switch
+                          selected={field.required}
+                          onClick={() => updateAccountField(index, fIndex, 'required', !field.required)}
+                          appearance="toggle"
+                        >
+                          Req
+                        </Switch>
+                      </FieldRow>
+                    ))}
+
+                    {account.authType === 'oauth' && (
+                      <div style={{ marginTop: 16 }}>
+                        <Heading level={4}>OAuth Configuration</Heading>
+                        <ControlGroup label="Redirect URI" labelPosition="top">
+                          <Text
+                            value={account.oauth?.redirectUri || ''}
+                            onChange={(_e: unknown, { value }: { value: string }) => updateAccount(index, 'oauth', { ...account.oauth, redirectUri: value })}
+                          />
+                        </ControlGroup>
+                      </div>
+                    )}
+                  </div>
+                </CollapsiblePanel>
+              </ComponentItem>
+            ))}
+
+            <Button appearance="primary" onClick={addAccount} label="+ Add Account Config" />
+          </div>
+        </TabLayout.Panel>
+
+        {/* REST Endpoints Tab */}
+        <TabLayout.Panel label={`REST (${config.restEndpoints.length})`} panelId="rest">
+          <div style={{ padding: '16px 0' }}>
+            <Heading level={3}>Custom REST Endpoints</Heading>
+            <p style={{ color: '#9b9ea3', fontSize: '0.875rem', marginBottom: 16 }}>
+              Define custom API endpoints handled by Python scripts.
+            </p>
+
+            {config.restEndpoints.map((endpoint, index) => (
+              <ComponentItem key={index}>
+                <CollapsiblePanel
+                  title={
+                    <ComponentHeaderRow>
+                      <ComponentName>{endpoint.name || '(Untitled Endpoint)'}</ComponentName>
+                      <ComponentId>{endpoint.handlerClass}</ComponentId>
+                    </ComponentHeaderRow>
+                  }
+                  open={openPanels.has(`rest-${index}`)}
+                  onChange={() => togglePanel(`rest-${index}`)}
+                  actions={
+                    <Button appearance="destructive" icon={<Cross />} onClick={(e: React.MouseEvent) => { e.stopPropagation(); removeRestEndpoint(index); }} />
+                  }
+                >
+                  <div style={{ padding: '16px 0' }}>
+                    <ColumnLayout>
+                      <ColumnLayout.Row>
+                        <ColumnLayout.Column span={6}>
+                          <ControlGroup label="Endpoint Name" labelPosition="top">
+                            <Text value={endpoint.name} onChange={(_e: unknown, { value }: { value: string }) => updateRestEndpoint(index, 'name', value)} placeholder="e.g. my_endpoint" />
+                          </ControlGroup>
+                        </ColumnLayout.Column>
+                        <ColumnLayout.Column span={6}>
+                          <ControlGroup label="Handler Class" labelPosition="top">
+                            <Text value={endpoint.handlerClass} onChange={(_e: unknown, { value }: { value: string }) => updateRestEndpoint(index, 'handlerClass', value)} placeholder="e.g. MyHandler" />
+                          </ControlGroup>
+                        </ColumnLayout.Column>
+                      </ColumnLayout.Row>
+                    </ColumnLayout>
+
+                    <ControlGroup label="Supported Methods" labelPosition="top">
+                      <MethodChips>
+                        {(['GET', 'POST', 'PUT', 'DELETE'] as const).map((method) => (
+                          <Chip
+                            key={method}
+                            onClick={() => toggleRestMethod(index, method)}
+                            appearance={endpoint.methods.includes(method) ? 'success' : 'outline'}
+                          >
+                            {method}
+                          </Chip>
+                        ))}
+                      </MethodChips>
+                    </ControlGroup>
+
+                    <ControlGroup label="Require Authentication" labelPosition="top">
+                      <Switch
+                        selected={endpoint.requiresAuth}
+                        onClick={() => updateRestEndpoint(index, 'requiresAuth', !endpoint.requiresAuth)}
+                        appearance="toggle"
+                      >
+                        {endpoint.requiresAuth ? 'Yes' : 'No'}
+                      </Switch>
+                    </ControlGroup>
+                  </div>
+                </CollapsiblePanel>
+              </ComponentItem>
+            ))}
+
+            <Button appearance="primary" onClick={addRestEndpoint} label="+ Add REST Endpoint" />
+          </div>
+        </TabLayout.Panel>
+
+        {/* Logging Tab */}
+        <TabLayout.Panel label="Logging" panelId="logging">
+          <div style={{ padding: '16px 0' }}>
+            <Heading level={3}>Logging Configuration</Heading>
+            <p style={{ color: '#9b9ea3', fontSize: '0.875rem', marginBottom: 16 }}>
+              Configure the logging tab that appears in the Configuration page.
+            </p>
+
+            <ControlGroup label="Enable Logging Tab" labelPosition="top">
+              <Switch
+                selected={config.logging.enabled}
+                onClick={() => onChange({ ...config, logging: { ...config.logging, enabled: !config.logging.enabled } })}
+                appearance="toggle"
+              >
+                {config.logging.enabled ? 'Enabled' : 'Disabled'}
+              </Switch>
+            </ControlGroup>
+
+            {config.logging.enabled && (
+              <>
+                <ControlGroup label="Default Log Level" labelPosition="top">
+                  <Select
+                    value={config.logging.defaultLevel}
+                    onChange={(_e: unknown, { value }: { value: string | number | boolean }) =>
+                      onChange({ ...config, logging: { ...config.logging, defaultLevel: String(value) as LogLevel } })
+                    }
+                  >
+                    <Select.Option label="DEBUG" value="DEBUG" />
+                    <Select.Option label="INFO" value="INFO" />
+                    <Select.Option label="WARNING" value="WARNING" />
+                    <Select.Option label="ERROR" value="ERROR" />
+                    <Select.Option label="CRITICAL" value="CRITICAL" />
+                  </Select>
+                </ControlGroup>
+
+                <ControlGroup label="Log Rotation Size (MB)" labelPosition="top" help="Maximum log file size before rotation.">
+                  <SplunkNumber
+                    value={config.logging.rotationSize ?? 25}
+                    onChange={(_e: unknown, { value }: { value?: number }) =>
+                      onChange({ ...config, logging: { ...config.logging, rotationSize: value } })
+                    }
+                  />
+                </ControlGroup>
+
+                <ControlGroup label="Retention Count" labelPosition="top" help="Number of rotated log files to keep.">
+                  <SplunkNumber
+                    value={config.logging.retentionCount ?? 5}
+                    onChange={(_e: unknown, { value }: { value?: number }) =>
+                      onChange({ ...config, logging: { ...config.logging, retentionCount: value } })
+                    }
+                  />
+                </ControlGroup>
+              </>
+            )}
+          </div>
+        </TabLayout.Panel>
+
+        {/* Proxy Tab */}
+        <TabLayout.Panel label="Proxy" panelId="proxy">
+          <div style={{ padding: '16px 0' }}>
+            <Heading level={3}>Proxy Configuration</Heading>
+            <p style={{ color: '#9b9ea3', fontSize: '0.875rem', marginBottom: 16 }}>
+              Configure the proxy tab that appears in the Configuration page.
+            </p>
+
+            <ControlGroup label="Enable Proxy Tab" labelPosition="top">
+              <Switch
+                selected={config.proxy.enabled}
+                onClick={() => onChange({ ...config, proxy: { ...config.proxy, enabled: !config.proxy.enabled } })}
+                appearance="toggle"
+              >
+                {config.proxy.enabled ? 'Enabled' : 'Disabled'}
+              </Switch>
+            </ControlGroup>
+
+            {config.proxy.enabled && (
+              <>
+                <ControlGroup label="Proxy Type" labelPosition="top">
+                  <Select
+                    value={config.proxy.proxyType}
+                    onChange={(_e: unknown, { value }: { value: string | number | boolean }) =>
+                      onChange({ ...config, proxy: { ...config.proxy, proxyType: String(value) as 'http' | 'socks4' | 'socks5' } })
+                    }
+                  >
+                    <Select.Option label="HTTP" value="http" />
+                    <Select.Option label="SOCKS4" value="socks4" />
+                    <Select.Option label="SOCKS5" value="socks5" />
+                  </Select>
+                </ControlGroup>
+
+                <ColumnLayout>
+                  <ColumnLayout.Row>
+                    <ColumnLayout.Column span={8}>
+                      <ControlGroup label="Proxy Host" labelPosition="top">
+                        <Text
+                          value={config.proxy.host}
+                          onChange={(_e: unknown, { value }: { value: string }) =>
+                            onChange({ ...config, proxy: { ...config.proxy, host: value } })
+                          }
+                          placeholder="proxy.example.com"
+                        />
+                      </ControlGroup>
+                    </ColumnLayout.Column>
+                    <ColumnLayout.Column span={4}>
+                      <ControlGroup label="Port" labelPosition="top">
+                        <Text
+                          value={config.proxy.port}
+                          onChange={(_e: unknown, { value }: { value: string }) =>
+                            onChange({ ...config, proxy: { ...config.proxy, port: value } })
+                          }
+                          placeholder="8080"
+                        />
+                      </ControlGroup>
+                    </ColumnLayout.Column>
+                  </ColumnLayout.Row>
+                  <ColumnLayout.Row>
+                    <ColumnLayout.Column span={6}>
+                      <ControlGroup label="Username (optional)" labelPosition="top">
+                        <Text
+                          value={config.proxy.username || ''}
+                          onChange={(_e: unknown, { value }: { value: string }) =>
+                            onChange({ ...config, proxy: { ...config.proxy, username: value } })
+                          }
+                        />
+                      </ControlGroup>
+                    </ColumnLayout.Column>
+                    <ColumnLayout.Column span={6}>
+                      <ControlGroup label="Password (optional)" labelPosition="top">
+                        <Text
+                          value={config.proxy.password || ''}
+                          onChange={(_e: unknown, { value }: { value: string }) =>
+                            onChange({ ...config, proxy: { ...config.proxy, password: value } })
+                          }
+                        />
+                      </ControlGroup>
+                    </ColumnLayout.Column>
+                  </ColumnLayout.Row>
+                </ColumnLayout>
+
+                {config.proxy.proxyType === 'socks5' && (
+                  <ControlGroup label="Reverse DNS" labelPosition="top">
+                    <Switch
+                      selected={config.proxy.rdns ?? false}
+                      onClick={() => onChange({ ...config, proxy: { ...config.proxy, rdns: !config.proxy.rdns } })}
+                      appearance="toggle"
+                    >
+                      {config.proxy.rdns ? 'Enabled' : 'Disabled'}
+                    </Switch>
+                  </ControlGroup>
+                )}
+              </>
+            )}
+          </div>
+        </TabLayout.Panel>
+
+        {/* Custom Config Tabs */}
+        <TabLayout.Panel label={`Custom (${config.customTabs.length})`} panelId="custom">
+          <div style={{ padding: '16px 0' }}>
+            <Heading level={3}>Custom Configuration Tabs</Heading>
+            <p style={{ color: '#9b9ea3', fontSize: '0.875rem', marginBottom: 16 }}>
+              Add custom configuration tabs to the app&apos;s Configuration page.
+            </p>
+
+            {config.customTabs.map((tab, index) => (
+              <ComponentItem key={index}>
+                <CollapsiblePanel
+                  title={
+                    <ComponentHeaderRow>
+                      <ComponentName>{tab.title || '(Untitled Tab)'}</ComponentName>
+                      <ComponentId>{tab.name}</ComponentId>
+                    </ComponentHeaderRow>
+                  }
+                  open={openPanels.has(`custom-${index}`)}
+                  onChange={() => togglePanel(`custom-${index}`)}
+                  actions={
+                    <Button appearance="destructive" icon={<Cross />} onClick={(e: React.MouseEvent) => {
+                      e.stopPropagation();
+                      const newTabs = [...config.customTabs];
+                      newTabs.splice(index, 1);
+                      onChange({ ...config, customTabs: newTabs });
+                    }} />
+                  }
+                >
+                  <div style={{ padding: '16px 0' }}>
+                    <ControlGroup label="Tab Name (Internal ID)" labelPosition="top">
+                      <Text
+                        value={tab.name}
+                        onChange={(_e: unknown, { value }: { value: string }) => {
+                          const newTabs = [...config.customTabs];
+                          newTabs[index] = { ...tab, name: value };
+                          onChange({ ...config, customTabs: newTabs });
+                        }}
+                        placeholder="e.g. custom_settings"
+                      />
+                    </ControlGroup>
+                    <ControlGroup label="Display Title" labelPosition="top">
+                      <Text
+                        value={tab.title}
+                        onChange={(_e: unknown, { value }: { value: string }) => {
+                          const newTabs = [...config.customTabs];
+                          newTabs[index] = { ...tab, title: value };
+                          onChange({ ...config, customTabs: newTabs });
+                        }}
+                        placeholder="e.g. Custom Settings"
+                      />
+                    </ControlGroup>
+                    <EntityBuilder
+                      entities={tab.entity}
+                      onChange={(entities) => {
+                        const newTabs = [...config.customTabs];
+                        newTabs[index] = { ...tab, entity: entities };
+                        onChange({ ...config, customTabs: newTabs });
+                      }}
+                    />
+                  </div>
+                </CollapsiblePanel>
+              </ComponentItem>
+            ))}
+
+            <Button
+              appearance="primary"
+              onClick={() => {
+                const newTabs = [...config.customTabs, { name: '', title: '', entity: [] }];
+                onChange({ ...config, customTabs: newTabs });
+                setOpenPanels((prev) => new Set([...prev, `custom-${newTabs.length - 1}`]));
+              }}
+              label="+ Add Custom Tab"
+            />
+          </div>
+        </TabLayout.Panel>
+      </TabLayout>
     </div>
   );
 }

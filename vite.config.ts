@@ -9,6 +9,19 @@ export default defineConfig({
       '@': resolve(__dirname, './src'),
     },
   },
+  server: {
+    proxy: {
+      // Proxy GitHub OAuth device flow requests to bypass CORS
+      '/github-api/login': {
+        target: 'https://github.com',
+        changeOrigin: true,
+        rewrite: (path) => path.replace(/^\/github-api/, ''),
+        headers: {
+          'Accept': 'application/json',
+        },
+      },
+    },
+  },
   test: {
     globals: true,
     environment: 'jsdom',
@@ -16,7 +29,14 @@ export default defineConfig({
     include: ['src/**/*.{test,spec}.{ts,tsx}'],
     coverage: {
       reporter: ['text', 'json', 'html'],
-      exclude: ['node_modules/', 'src/test/'],
+      include: ['src/lib/**', 'src/types/**'],
+      exclude: ['node_modules/', 'src/test/', 'src/lib/ai/**', 'src/lib/github.ts', 'src/types/index.ts'],
+      thresholds: {
+        lines: 80,
+        functions: 80,
+        branches: 80,
+        statements: 80,
+      },
     },
   },
 });

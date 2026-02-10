@@ -135,6 +135,31 @@ export interface RestEndpointConfig {
   description?: string;
 }
 
+export type LogLevel = 'DEBUG' | 'INFO' | 'WARNING' | 'ERROR' | 'CRITICAL';
+
+export interface LoggingConfig {
+  enabled: boolean;
+  defaultLevel: LogLevel;
+  rotationSize?: number;  // MB
+  retentionCount?: number;
+}
+
+export interface ProxyConfig {
+  enabled: boolean;
+  proxyType: 'http' | 'socks4' | 'socks5';
+  host: string;
+  port: string;
+  username?: string;
+  password?: string;
+  rdns?: boolean;
+}
+
+export interface CustomConfigTab {
+  name: string;
+  title: string;
+  entity: EntityField[];
+}
+
 /**
  * Complete component configuration for the wizard
  */
@@ -144,6 +169,9 @@ export interface ComponentsConfig {
   alertActions: AlertActionConfig[];
   accounts: AccountConfig[];
   restEndpoints: RestEndpointConfig[];
+  logging: LoggingConfig;
+  proxy: ProxyConfig;
+  customTabs: CustomConfigTab[];
 }
 
 export const DEFAULT_COMPONENTS_CONFIG: ComponentsConfig = {
@@ -152,6 +180,17 @@ export const DEFAULT_COMPONENTS_CONFIG: ComponentsConfig = {
   alertActions: [],
   accounts: [],
   restEndpoints: [],
+  logging: {
+    enabled: false,
+    defaultLevel: 'INFO',
+  },
+  proxy: {
+    enabled: false,
+    proxyType: 'http',
+    host: '',
+    port: '',
+  },
+  customTabs: [],
 };
 
 /**

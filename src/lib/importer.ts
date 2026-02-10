@@ -17,20 +17,21 @@ export async function importAppFromZip(zipFile: File): Promise<ImportAnalysis> {
   const files: Array<{ path: string; content: string; checksum: string }> = [];
   const warnings: string[] = [];
 
-  // Extract all text files
+  // Extract all files (text as string, binary as base64)
   for (const [path, zipEntry] of Object.entries(zip.files)) {
     if (zipEntry.dir) continue;
 
-    // Skip binary files for now (we'll handle them separately)
-    if (isBinaryFile(path)) {
-      warnings.push(`Binary file skipped: ${path}`);
-      continue;
-    }
-
     try {
-      const content = await zipEntry.async('string');
-      const checksum = await sha256(content);
-      files.push({ path: normalizePath(path), content, checksum });
+      if (isBinaryFile(path)) {
+        // Read binary files as base64
+        const base64 = await zipEntry.async('base64');
+        const checksum = await sha256(base64);
+        files.push({ path: normalizePath(path), content: base64, checksum });
+      } else {
+        const content = await zipEntry.async('string');
+        const checksum = await sha256(content);
+        files.push({ path: normalizePath(path), content, checksum });
+      }
     } catch {
       warnings.push(`Could not read file: ${path}`);
     }
@@ -195,7 +196,7 @@ export function extractSourceFiles(
  */
 function isBinaryFile(path: string): boolean {
   const binaryExtensions = [
-    '.png', '.jpg', '.jpeg', '.gif', '.ico', '.svg',
+    '.png', '.jpg', '.jpeg', '.gif', '.ico',
     '.woff', '.woff2', '.ttf', '.eot',
     '.zip', '.tar', '.gz', '.tgz',
     '.pyc', '.pyo',

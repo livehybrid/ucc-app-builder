@@ -3,7 +3,7 @@
  * Generates all required Splunk icon sizes from a single uploaded image
  */
 
-export interface IconSet {
+interface IconSet {
   'appIcon.png': string;      // 36x36
   'appIcon_2x.png': string;   // 72x72
   'appIconAlt.png': string;   // 36x36
@@ -104,12 +104,3 @@ export function isValidImageFile(file: File): boolean {
   return validTypes.includes(file.type);
 }
 
-/**
- * Get image dimensions from a File
- */
-export async function getImageDimensions(
-  file: File
-): Promise<{ width: number; height: number }> {
-  const img = await loadImage(file);
-  return { width: img.width, height: img.height };
-}

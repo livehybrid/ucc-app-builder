@@ -111,7 +111,8 @@ export class UCCGenService {
         'init',
         '--addon-name', appId,
         '--addon-display-name', appId,
-        '--addon-input-name', appId
+        '--addon-input-name', appId,
+        '--overwrite'
       ];
       onLog(`Running: ${this.uccGenPath} ${args.join(' ')}`);
 
@@ -229,7 +230,7 @@ export class UCCGenService {
     onLog: (log: string) => void
   ): Promise<string> {
     return new Promise((resolve, reject) => {
-      const args = ['package', '--source', outputDir];
+      const args = ['package', '--path', outputDir];
 
       onLog(`Running: ${this.uccGenPath} ${args.join(' ')}`);
 
@@ -240,22 +241,35 @@ export class UCCGenService {
 
       let outputPath = '';
 
+      const capturePath = (line: string) => {
+        // ucc-gen prints "Package exported to /path/to/app-1.0.0.tar.gz" (often on stderr)
+        const exportedMatch = line.match(/exported to\s+(.+?\.(?:tar\.gz|tgz))/i);
+        if (exportedMatch) {
+          outputPath = exportedMatch[1].trim();
+          return;
+        }
+        // Fallback: line is exactly an absolute path to the tarball
+        const trimmed = line.trim();
+        if ((trimmed.endsWith('.tar.gz') || trimmed.endsWith('.tgz')) && path.isAbsolute(trimmed)) {
+          outputPath = trimmed;
+        }
+      };
+
       proc.stdout.on('data', (data) => {
         const line = data.toString().trim();
         onLog(line);
-        // Try to capture the output path
-        if (line.includes('.tar.gz') || line.includes('.tgz')) {
-          outputPath = line;
-        }
+        capturePath(line);
       });
 
       proc.stderr.on('data', (data) => {
-        onLog(data.toString().trim());
+        const line = data.toString().trim();
+        onLog(line);
+        capturePath(line);
       });
 
       proc.on('close', (code) => {
         if (code === 0) {
-          resolve(outputPath || path.join(outputDir, 'package.tgz'));
+          resolve(outputPath || path.join(workDir, 'package.tgz'));
         } else {
           reject(new Error(`ucc-gen package failed with code ${code}`));
         }

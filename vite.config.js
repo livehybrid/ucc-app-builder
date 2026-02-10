@@ -8,6 +8,19 @@ export default defineConfig({
             '@': resolve(__dirname, './src'),
         },
     },
+    server: {
+        proxy: {
+            // Proxy GitHub OAuth device flow requests to bypass CORS
+            '/github-api/login': {
+                target: 'https://github.com',
+                changeOrigin: true,
+                rewrite: function (path) { return path.replace(/^\/github-api/, ''); },
+                headers: {
+                    'Accept': 'application/json',
+                },
+            },
+        },
+    },
     test: {
         globals: true,
         environment: 'jsdom',

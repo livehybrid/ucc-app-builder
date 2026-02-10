@@ -9,6 +9,22 @@ import type { ComponentsConfig, CustomCommandConfig, RestEndpointConfig } from '
 import { createGlobalConfig } from '../types/globalConfig';
 import { dataUrlToBase64 } from './imageUtils';
 
+/** Reserved path segment: must be a directory, not a file. */
+const BIN_DIR = 'bin';
+
+/**
+ * Return a safe script filename for package/bin/ so we never create a file
+ * named "bin" (which would block creating the bin/ directory).
+ */
+function safeBinScriptFilename(filename: string, commandName: string, index: number): string {
+  const base = (filename || '').trim();
+  if (base && base !== BIN_DIR) {
+    return base.includes('.') ? base : `${base}.py`;
+  }
+  const safeName = (commandName || `command_${index}`).replace(/[^a-zA-Z0-9_-]/g, '_') || `command_${index}`;
+  return `${safeName}.py`;
+}
+
 export interface GeneratorOptions {
   metadata: AppMetadata;
   branding: BrandingConfig;
@@ -27,41 +43,49 @@ export function generateSplunkApp(vfs: VirtualFileSystem, options: GeneratorOpti
 
   // 1. Generate globalConfig.json
   const globalConfig = createGlobalConfig(appId, metadata.displayName || metadata.name, metadata.version, components);
-  vfs.writeFile(`${appId}/globalConfig.json`, JSON.stringify(globalConfig, null, 2));
+  vfs.writeFile(`${appId}/globalConfig.json`, JSON.stringify(globalConfig, null, 2), 'generated');
 
   // 2. Generate app.manifest
   const manifest = generateAppManifest(metadata);
-  vfs.writeFile(`${appId}/package/app.manifest`, JSON.stringify(manifest, null, 2));
+  vfs.writeFile(`${appId}/package/app.manifest`, JSON.stringify(manifest, null, 2), 'generated');
 
   // 3. Generate app.conf
   const appConf = generateAppConf(metadata);
-  vfs.writeFile(`${appId}/package/default/app.conf`, appConf);
+  vfs.writeFile(`${appId}/package/default/app.conf`, appConf, 'generated');
 
   // 4. Generate navigation XML
   const navXml = generateNavXml(branding.navBarColor);
-  vfs.writeFile(`${appId}/package/default/data/ui/nav/default.xml`, navXml);
+  vfs.writeFile(`${appId}/package/default/data/ui/nav/default.xml`, navXml, 'generated');
 
   // 5. Generate commands.conf (Custom Commands)
   if (components.commands.length > 0) {
     const commandsConf = generateCommandsConf(components.commands);
-    vfs.writeFile(`${appId}/package/default/commands.conf`, commandsConf);
+    vfs.writeFile(`${appId}/package/default/commands.conf`, commandsConf, 'generated');
 
-    // Generate Python scripts for commands
-    components.commands.forEach(cmd => {
+    // Generate Python scripts for commands (avoid filename that conflicts with bin/ directory)
+    components.commands.forEach((cmd, index) => {
       const scriptContent = generateCommandScript(cmd);
-      vfs.writeFile(`${appId}/package/bin/${cmd.filename}`, scriptContent);
+      const scriptFilename = safeBinScriptFilename(cmd.filename, cmd.name, index);
+      vfs.writeFile(`${appId}/package/bin/${scriptFilename}`, scriptContent, 'generated');
     });
   }
 
-  // 6. Generate alert_actions.conf (Alert Actions)
+  // 6. Generate alert_actions.conf (Alert Actions) with two-file pattern
   if (components.alertActions.length > 0) {
     const alertActionsConf = generateAlertActionsConf(components.alertActions);
-    vfs.writeFile(`${appId}/package/default/alert_actions.conf`, alertActionsConf);
+    vfs.writeFile(`${appId}/package/default/alert_actions.conf`, alertActionsConf, 'generated');
+    
+    const alertLibDir = appId.toLowerCase().replace(/[^a-z0-9]/g, '_');
 
-    // Generate Python scripts for alert actions
+    // Generate Python scripts for alert actions (main + helper)
     components.alertActions.forEach(alert => {
-      const scriptContent = generateAlertScript(alert);
-      vfs.writeFile(`${appId}/package/bin/${alert.name}.py`, scriptContent);
+      // Main script (auto-generated, references helper)
+      const mainScript = generateAlertMainScript(appId, alert.name);
+      vfs.writeFile(`${appId}/package/bin/${alert.name}.py`, mainScript, 'generated');
+      
+      // Helper file (user-customizable)
+      const helperScript = generateAlertHelperScript(alert.name, alert.label);
+      vfs.writeFile(`${appId}/package/bin/${alertLibDir}/modalert_${alert.name}_helper.py`, helperScript, 'generated');
     });
   }
 
@@ -69,42 +93,64 @@ export function generateSplunkApp(vfs: VirtualFileSystem, options: GeneratorOpti
   if (components.restEndpoints.length > 0) {
     const restmapConf = generateRestmapConf(components.restEndpoints);
     const webConf = generateWebConf(components.restEndpoints);
-    vfs.writeFile(`${appId}/package/default/restmap.conf`, restmapConf);
-    vfs.writeFile(`${appId}/package/default/web.conf`, webConf);
+    vfs.writeFile(`${appId}/package/default/restmap.conf`, restmapConf, 'generated');
+    vfs.writeFile(`${appId}/package/default/web.conf`, webConf, 'generated');
 
     // Generate Python handlers
     components.restEndpoints.forEach(endpoint => {
       const handlerContent = generateRestHandlerScript(endpoint);
-      vfs.writeFile(`${appId}/package/bin/${endpoint.name}_handler.py`, handlerContent);
+      vfs.writeFile(`${appId}/package/bin/${endpoint.name}_handler.py`, handlerContent, 'generated');
     });
   }
 
-  // 8. Generate modular input scripts
+  // 8. Generate modular input scripts and helper files
+  const libDir = appId.toLowerCase().replace(/[^a-z0-9]/g, '_');
   components.inputs.forEach(input => {
-    // Note: UCC usually generates the main script, but we can provide a custom base or helper
-    const scriptContent = generateInputScript();
-    vfs.writeFile(`${appId}/package/bin/${input.name}.py`, scriptContent);
+    // Main input script (auto-generated, references helper)
+    const scriptContent = generateInputScript(input.name, input.title);
+    vfs.writeFile(`${appId}/package/bin/${input.name}.py`, scriptContent, 'generated');
+    
+    // Helper file (user-customizable)
+    const helperContent = generateInputHelperScript(input.name);
+    // Flattened path: package/bin/input_helper.py
+    vfs.writeFile(`${appId}/package/bin/${input.name}_helper.py`, helperContent, 'generated');
   });
+  
+  // Generate import_declare_test.py for library path setup
+  if (components.inputs.length > 0 || components.alertActions.length > 0 || components.restEndpoints.length > 0) {
+    const importDeclare = generateImportDeclareTest(appId);
+    vfs.writeFile(`${appId}/package/bin/import_declare_test.py`, importDeclare, 'generated');
+    
+    // Create __init__.py for the lib module
+    vfs.writeFile(`${appId}/package/bin/${libDir}/__init__.py`, '# Auto-generated by Splunk App Builder\n', 'generated');
+  }
 
   // 9. Store Icons
   if (branding.processedIcons) {
     const { appIcon, appIcon2x, appIconAlt, appIconAlt2x } = branding.processedIcons;
 
-    vfs.writeFile(`${appId}/package/static/appIcon.png`, dataUrlToBase64(appIcon));
-    vfs.writeFile(`${appId}/package/static/appIcon_2x.png`, dataUrlToBase64(appIcon2x));
-    vfs.writeFile(`${appId}/package/static/appIconAlt.png`, dataUrlToBase64(appIconAlt));
-    vfs.writeFile(`${appId}/package/static/appIconAlt_2x.png`, dataUrlToBase64(appIconAlt2x));
+    vfs.writeFile(`${appId}/package/static/appIcon.png`, dataUrlToBase64(appIcon), 'generated');
+    vfs.writeFile(`${appId}/package/static/appIcon_2x.png`, dataUrlToBase64(appIcon2x), 'generated');
+    vfs.writeFile(`${appId}/package/static/appIconAlt.png`, dataUrlToBase64(appIconAlt), 'generated');
+    vfs.writeFile(`${appId}/package/static/appIconAlt_2x.png`, dataUrlToBase64(appIconAlt2x), 'generated');
   } else {
-    vfs.writeFile(`${appId}/package/static/README`, 'Place icons here.');
+    vfs.writeFile(`${appId}/package/static/README`, 'Place icons here.', 'generated');
   }
 
-  // 10. Generate README
+  // 10. Generate metadata files
+  const defaultMeta = generateDefaultMeta();
+  vfs.writeFile(`${appId}/package/metadata/default.meta`, defaultMeta, 'generated');
+  const localMeta = generateLocalMeta();
+  vfs.writeFile(`${appId}/package/metadata/local.meta`, localMeta, 'generated');
+
+  // 11. Generate README
   vfs.writeFile(
     `${appId}/package/README.txt`,
-    `${metadata.displayName || metadata.name}\n${'='.repeat((metadata.displayName || metadata.name).length)}\n\n${metadata.description || 'A Splunk add-on built with UCC framework.'}\n`
+    `${metadata.displayName || metadata.name}\n${'='.repeat((metadata.displayName || metadata.name).length)}\n\n${metadata.description || 'A Splunk add-on built with UCC framework.'}\n`,
+    'generated'
   );
 
-  vfs.writeFile(`${appId}/package/lib/README`, 'Third-party Python libraries go here.');
+  vfs.writeFile(`${appId}/package/lib/README`, 'Third-party Python libraries go here.', 'generated');
 }
 
 function generateAppConf(metadata: AppMetadata): string {
@@ -144,9 +190,9 @@ function generateAppManifest(metadata: AppMetadata): object {
         },
       ],
       description: metadata.description || '',
-      supportedDeployments: ['_standalone', '_distributed', '_search_head_clustering'],
-      targetWorkloads: ['_search_heads'],
     },
+    supportedDeployments: ['_standalone', '_distributed', '_search_head_clustering'],
+    targetWorkloads: ['_search_heads'],
   };
 }
 
@@ -161,14 +207,17 @@ function generateNavXml(color: string): string {
 }
 
 function generateCommandsConf(commands: CustomCommandConfig[]): string {
-  return commands.map(cmd => `[${cmd.name}]
-filename = ${cmd.filename}
+  return commands.map((cmd, index) => {
+    const scriptFilename = safeBinScriptFilename(cmd.filename, cmd.name, index);
+    return `[${cmd.name}]
+filename = ${scriptFilename}
 chunked = ${cmd.chunked ? 'true' : 'false'}
 type = ${cmd.type || 'python'}
 passauth = ${cmd.passauth ? 'true' : 'false'}
 enableheader = ${cmd.enableheader ? 'true' : 'false'}
 supports_multivalues = ${cmd.supports_multivalues ? 'true' : 'false'}
-`).join('\n');
+`;
+  }).join('\n');
 }
 
 function generateCommandScript(cmd: CustomCommandConfig): string {
@@ -200,7 +249,7 @@ dispatch(${cmd.name.charAt(0).toUpperCase() + cmd.name.slice(1)}Command, sys.arg
 `;
 }
 
-function generateAlertActionsConf(alerts: any[]): string {
+function generateAlertActionsConf(alerts: { name: string; label: string; description?: string; iconPath?: string }[]): string {
   return alerts.map(alert => `[${alert.name}]
 is_custom = 1
 label = ${alert.label}
@@ -210,38 +259,7 @@ payload_format = json
 `).join('\n');
 }
 
-function generateAlertScript(alert: any): string {
-  return `
-# encoding = utf-8
-# Always put this line at the beginning of this file
-import ta_${alert.name}_declare
 
-import os
-import sys
-from splunklib.modularinput.event import Event, ET
-from splunklib.modularinput.event_writer import EventWriter
-
-def process_event(helper, *args, **kwargs):
-    """
-    # IMPORTANT
-    # Do not remove the anchor macro:start and macro:end lines.
-    # These lines are used to generate sample code. If they are
-    # removed, the sample code will not be updated when configurations
-    # are updated.
-
-    [sample_code_macro:start]
-    # The following example gets the alert action parameters and prints them to the log
-    url = helper.get_param("url")
-    helper.log_info("Alert action ${alert.name} started.")
-
-    # TODO: Implement your alert action logic here
-    [sample_code_macro:end]
-    """
-
-    helper.log_info("Alert action ${alert.name} started.")
-    return 0
-`;
-}
 
 function generateRestmapConf(endpoints: RestEndpointConfig[]): string {
   const stanzas = endpoints.map(ep => `[script:${ep.name}]
@@ -284,12 +302,304 @@ class ${endpoint.handlerClass}(PersistentServerConnectionApplication):
 `;
 }
 
-function generateInputScript(): string {
-  return `
-import sys
-import os
+function generateInputScript(inputName: string, inputTitle: string): string {
+  const className = inputName.charAt(0).toUpperCase() + inputName.slice(1).replace(/_([a-z])/g, (_, c) => c.toUpperCase());
+  
+  return `import import_declare_test
 
-# TODO: Add your modular input logic here
-# This is a placeholder for custom logic
+import sys
+import json
+
+from splunklib import modularinput as smi
+
+import os
+import traceback
+import requests
+from solnlib import conf_manager
+from solnlib import log
+from solnlib.modular_input import checkpointer
+from splunktaucclib.modinput_wrapper import base_modinput as base_mi
+
+import ${inputName}_helper
+
+bin_dir = os.path.basename(__file__)
+app_name = os.path.basename(os.path.dirname(os.getcwd()))
+
+class ModInput${className}(base_mi.BaseModInput):
+
+    def __init__(self):
+        use_single_instance = False
+        super(ModInput${className}, self).__init__(app_name, "${inputName}", use_single_instance)
+        self.global_checkbox_fields = None
+
+    def get_scheme(self):
+        scheme = smi.Scheme('${inputTitle}')
+        scheme.description = '${inputTitle} modular input'
+        scheme.use_external_validation = True
+        scheme.streaming_mode_xml = True
+        scheme.use_single_instance = False
+
+        scheme.add_argument(
+            smi.Argument(
+                'name',
+                title='Name',
+                description='Name',
+                required_on_create=True
+            )
+        )
+        return scheme
+
+    def validate_input(self, definition):
+        return ${inputName}_helper.validate_input(self, definition)
+
+    def get_app_name(self):
+        return app_name
+
+    def collect_events(self, ew):
+        return ${inputName}_helper.collect_events(self, ew)
+
+    def get_account_fields(self):
+        account_fields = []
+        return account_fields
+
+    def get_checkbox_fields(self):
+        checkbox_fields = []
+        return checkbox_fields
+
+    def get_global_checkbox_fields(self):
+        if self.global_checkbox_fields is None:
+            checkbox_name_file = os.path.join(bin_dir, 'global_checkbox_param.json')
+            try:
+                if os.path.isfile(checkbox_name_file):
+                    with open(checkbox_name_file, 'r') as fp:
+                        self.global_checkbox_fields = json.load(fp)
+                else:
+                    self.global_checkbox_fields = []
+            except Exception as e:
+                self.log_error('Get exception when loading global checkbox parameter names. ' + str(e))
+                self.global_checkbox_fields = []
+        return self.global_checkbox_fields
+
+
+if __name__ == '__main__':
+    exit_code = ModInput${className}().run(sys.argv)
+    sys.exit(exit_code)
 `;
 }
+
+/**
+ * Generate the helper file for a modular input (user-customizable)
+ */
+function generateInputHelperScript(inputName: string): string {
+  return `# encoding = utf-8
+"""
+This module is the helper for the ${inputName} modular input.
+Implement your custom data collection logic in the collect_events function.
+"""
+
+
+def validate_input(helper, definition):
+    """
+    Implement your own validation logic to validate the input stanza configurations.
+    Return None if validation passes, or raise an exception if validation fails.
+    """
+    pass
+
+
+def collect_events(helper, ew):
+    """
+    Implement your data collection logic here.
+
+    helper is a ModularInputHelper object that provides useful methods:
+        - helper.get_arg('arg_name') - Get input argument value
+        - helper.get_output_index() - Get the output index
+        - helper.get_input_stanza_names() - Get input stanza names
+        - helper.send_http_request(url, method, ...) - Make HTTP requests
+        - helper.log_debug/info/warning/error/critical() - Logging methods
+
+    ew is an EventWriter object used to write events:
+        - event = helper.new_event(source=..., index=..., sourcetype=..., data=...)
+        - ew.write_event(event)
+    """
+    # TODO: Implement your data collection logic here
+    helper.log_info("${inputName} collection started")
+
+    # Example: Make an API call and write events
+    # response = helper.send_http_request(url, "GET", headers=None)
+    # if response.status_code == 200:
+    #     data = response.json()
+    #     event = helper.new_event(
+    #         source="${inputName}",
+    #         index=helper.get_output_index(),
+    #         sourcetype="${inputName}",
+    #         data=json.dumps(data)
+    #     )
+    #     ew.write_event(event)
+
+    helper.log_info("${inputName} collection completed")
+`;
+}
+
+function generateDefaultMeta(): string {
+  return `# Application-level permissions
+
+[]
+access = read : [ * ], write : [ admin, sc_admin ]
+
+[app/install]
+access = read : [ * ], write : [ admin, sc_admin ]
+
+[app/launcher]
+access = read : [ * ], write : [ admin, sc_admin ]
+
+[app/ui]
+access = read : [ * ], write : [ admin, sc_admin ]
+
+[commands]
+export = system
+
+[inputs]
+access = read : [ * ], write : [ admin, sc_admin ]
+
+[alert_actions]
+export = system
+
+[restmap]
+export = system
+
+[web]
+export = system
+
+[views]
+access = read : [ * ], write : [ admin, sc_admin ]
+
+[nav]
+access = read : [ * ], write : [ admin, sc_admin ]
+
+[passwords]
+access = read : [ admin ], write : [ admin ]
+export = system
+`;
+}
+
+function generateLocalMeta(): string {
+  return `[]
+access = read : [ * ], write : [ admin ]
+export = none
+`;
+}
+
+/**
+ * Generate import_declare_test.py for library path setup (UCC pattern)
+ */
+function generateImportDeclareTest(appId: string): string {
+  const taName = appId.toLowerCase().replace(/[^a-z0-9]/g, '_');
+  
+  return `import os
+import sys
+import re
+from os.path import dirname
+
+ta_name = '${taName}'
+pattern = re.compile(r'[\\\\\\\\/]etc[\\\\\\\\/]apps[\\\\\\\\/][^\\\\\\\\/]+[\\\\\\\\/]bin[\\\\\\\\/]?$')
+new_paths = [path for path in sys.path if not pattern.search(path) or ta_name in path]
+new_paths.insert(0, os.path.join(dirname(dirname(__file__)), "lib"))
+new_paths.insert(0, os.path.sep.join([os.path.dirname(__file__), ta_name]))
+sys.path = new_paths
+`;
+}
+
+/**
+ * Generate the main alert action script (auto-generated, references helper)
+ */
+function generateAlertMainScript(appId: string, alertName: string): string {
+  const libDir = appId.toLowerCase().replace(/[^a-z0-9]/g, '_');
+  const helperModule = `modalert_${alertName}_helper`;
+  
+  return `# encoding = utf-8
+import import_declare_test
+
+import os
+import sys
+import json
+import gzip
+import csv
+
+from ${libDir} import ${helperModule}
+
+def process_event(helper, *args, **kwargs):
+    """
+    Main entry point for alert action.
+    """
+    return ${helperModule}.process_event(helper, *args, **kwargs)
+
+
+if __name__ == "__main__":
+    # This is the entry point when Splunk executes the alert action
+    import modalert_${alertName}_helper as helper_module
+    
+    # Splunk passes the payload via stdin
+    payload = json.loads(sys.stdin.read())
+    
+    # Create a simple helper object
+    class AlertHelper:
+        def __init__(self, payload):
+            self.payload = payload
+            
+        def get_param(self, name):
+            return self.payload.get('configuration', {}).get(name)
+            
+        def log_info(self, msg):
+            sys.stderr.write(f"INFO: {msg}\\n")
+            
+        def log_error(self, msg):
+            sys.stderr.write(f"ERROR: {msg}\\n")
+    
+    helper = AlertHelper(payload)
+    result = helper_module.process_event(helper)
+    sys.exit(0 if result == 0 else 1)
+`;
+}
+
+/**
+ * Generate the alert action helper file (user-customizable)
+ */
+function generateAlertHelperScript(alertName: string, alertLabel: string): string {
+  return `# encoding = utf-8
+"""
+This module is the helper for the ${alertLabel} alert action.
+Implement your custom alert action logic in the process_event function.
+"""
+
+
+def process_event(helper, *args, **kwargs):
+    """
+    Process the alert action.
+    
+    helper provides useful methods:
+        - helper.get_param('param_name') - Get alert action parameter
+        - helper.log_info/error() - Logging methods
+        
+    The payload contains:
+        - results: The search results that triggered the alert
+        - configuration: The alert action parameters
+        - session_key: Splunk session key for API calls
+    
+    Returns:
+        0 for success, non-zero for failure
+    """
+    helper.log_info("Alert action ${alertName} started")
+    
+    # TODO: Implement your alert action logic here
+    # Example: Get a parameter value
+    # my_param = helper.get_param("my_parameter")
+    
+    # Example: Process search results
+    # for result in helper.payload.get('results', []):
+    #     helper.log_info(f"Processing result: {result}")
+    
+    helper.log_info("Alert action ${alertName} completed")
+    return 0
+`;
+}
+

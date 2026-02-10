@@ -1,3 +1,5 @@
+import path from 'path';
+import fs from 'fs/promises';
 import { Router, Request, Response } from 'express';
 import { v4 as uuidv4 } from 'uuid';
 import { UCCGenService, BuildStatus } from '../services/uccGen.js';
@@ -83,9 +85,19 @@ router.get('/build/:buildId/download', async (req: Request, res: Response) => {
   }
 
   try {
-    const zipBuffer = await fileHandler.createZipFromDirectory(build.outputPath);
     const filename = `${build.appId || 'app'}.tgz`;
 
+    // ucc-gen package produces a .tar.gz file; stream it directly
+    if (build.outputPath.endsWith('.tgz') || build.outputPath.endsWith('.tar.gz')) {
+      const buffer = await fs.readFile(build.outputPath);
+      res.setHeader('Content-Type', 'application/gzip');
+      res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
+      res.send(buffer);
+      return;
+    }
+
+    // Legacy: output path is a directory
+    const zipBuffer = await fileHandler.createZipFromDirectory(build.outputPath);
     res.setHeader('Content-Type', 'application/gzip');
     res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
     res.send(zipBuffer);
@@ -185,9 +197,10 @@ async function runBuild(
     }, version);
     build.progress = 80;
 
-    // Package the output
+    // Package the output (ucc-gen build writes to output/<appID>, so point package at that)
     build.logs.push('Packaging output...');
-    const packagePath = await uccGenService.package(workDir, outputDir, (log) => {
+    const builtAppPath = path.join(outputDir, appId);
+    const packagePath = await uccGenService.package(workDir, builtAppPath, (log) => {
       build.logs.push(log);
     });
     build.outputPath = packagePath;

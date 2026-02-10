@@ -1,5 +1,15 @@
+import { useState, useCallback } from 'react';
+import styled from 'styled-components';
+import Button from '@splunk/react-ui/Button';
+import ControlGroup from '@splunk/react-ui/ControlGroup';
+import Text from '@splunk/react-ui/Text';
+import TextArea from '@splunk/react-ui/TextArea';
+import Heading from '@splunk/react-ui/Heading';
+import DefinitionList from '@splunk/react-ui/DefinitionList';
+import { variables } from '@splunk/themes';
 import { WIZARD_STEPS } from '../types';
-import type { WizardState } from '../types';
+import type { WizardState, BrandingConfig } from '../types';
+import type { ComponentsConfig } from '../types/components';
 import { BrandingStep } from './wizard/BrandingStep';
 import { ComponentsStep } from './wizard/ComponentsStep';
 import { createGlobalConfig } from '../types/globalConfig';
@@ -10,8 +20,118 @@ interface WizardProps {
   onGenerate: () => void;
 }
 
+const WizardContainer = styled.div`
+  background: ${variables.backgroundColorDialog};
+  border-radius: 12px;
+  padding: 32px;
+  max-width: 960px;
+  margin: 32px auto;
+  width: calc(100% - 64px);
+  border: 1px solid ${variables.borderColor};
+`;
+
+/* Custom Step Indicator - replacing StepBar for better control */
+const StepIndicatorContainer = styled.div`
+  display: flex;
+  align-items: flex-start;
+  justify-content: center;
+  gap: 0;
+  margin-bottom: 8px;
+`;
+
+const StepItem = styled.div<{ $isActive: boolean; $isCompleted: boolean }>`
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  position: relative;
+  flex: 1;
+  max-width: 180px;
+  
+  &:not(:last-child)::after {
+    content: '';
+    position: absolute;
+    top: 18px;
+    left: calc(50% + 22px);
+    width: calc(100% - 44px);
+    height: 2px;
+    background: ${props => props.$isCompleted ? '#65A637' : variables.borderColor};
+  }
+`;
+
+const StepCircle = styled.div<{ $isActive: boolean; $isCompleted: boolean }>`
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: 600;
+  font-size: 1rem;
+  line-height: 1;
+  transition: all 0.2s ease;
+  flex-shrink: 0;
+  
+  ${props => props.$isActive ? `
+    background: linear-gradient(135deg, #65A637, #8BC34A);
+    color: white;
+    box-shadow: 0 4px 12px rgba(101, 166, 55, 0.3);
+  ` : props.$isCompleted ? `
+    background: #65A637;
+    color: white;
+  ` : `
+    background: ${variables.backgroundColorPage};
+    border: 2px solid ${variables.borderColor};
+    color: #9b9ea3;
+  `}
+`;
+
+const StepLabel = styled.span<{ $isActive: boolean }>`
+  margin-top: 10px;
+  font-size: 0.85rem;
+  font-weight: ${props => props.$isActive ? 600 : 400};
+  color: ${props => props.$isActive ? '#65A637' : '#9b9ea3'};
+  text-align: center;
+  white-space: nowrap;
+`;
+
+const WizardContent = styled.div`
+  margin-top: 24px;
+`;
+
+const WizardActions = styled.div`
+  display: flex;
+  justify-content: space-between;
+  margin-top: 32px;
+  padding-top: 16px;
+  border-top: 1px solid ${variables.borderColor};
+`;
+
+const CodePreview = styled.pre`
+  background: ${variables.backgroundColorPage};
+  border: 1px solid ${variables.borderColor};
+  border-radius: 4px;
+  padding: 16px;
+  overflow: auto;
+  font-family: 'Splunk Platform Mono', Inconsolata, Consolas, monospace;
+  font-size: 0.875rem;
+  max-height: 300px;
+`;
+
 export function Wizard({ state, onChange, onGenerate }: WizardProps) {
   const currentStepId = WIZARD_STEPS[state.currentStep].id;
+  const [touched, setTouched] = useState<Record<string, boolean>>({});
+
+  const markTouched = useCallback((field: string) => {
+    setTouched((prev) => ({ ...prev, [field]: true }));
+  }, []);
+
+  const getFieldError = (field: string, value: string, required?: boolean): string | undefined => {
+    if (!touched[field]) return undefined;
+    if (required && !value.trim()) return 'This field is required';
+    if (field === 'version' && value && !/^\d+\.\d+\.\d+/.test(value)) return 'Must be a valid semantic version (e.g. 1.0.0)';
+    if (field === 'appId' && value && !/^[a-z][a-z0-9_]*$/.test(value)) return 'Must start with lowercase letter, only a-z, 0-9, and underscores';
+    return undefined;
+  };
 
   const updateMetadata = (field: string, value: string) => {
     onChange({
@@ -20,17 +140,17 @@ export function Wizard({ state, onChange, onGenerate }: WizardProps) {
     });
   };
 
-  const handleStepChange = (field: string, value: any) => {
+  const handleStepChange = (field: string, value: string | boolean | BrandingConfig) => {
     onChange({
       ...state,
-      [field]: value
+      [field]: value,
     });
   };
 
-  const updateComponents = (config: any) => {
+  const updateComponents = (config: ComponentsConfig) => {
     onChange({
       ...state,
-      components: config
+      components: config,
     });
   };
 
@@ -45,99 +165,84 @@ export function Wizard({ state, onChange, onGenerate }: WizardProps) {
     return true;
   };
 
-  const isStepComplete = (stepIndex: number) => {
-    if (stepIndex === 0) {
-      return state.metadata.name.trim() !== '' && state.metadata.version.trim() !== '';
-    }
-    return stepIndex < state.currentStep;
-  };
-
   return (
-    <div className="wizard">
-      <div className="wizard-steps">
-        {WIZARD_STEPS.map((step, index) => (
-          <button
-            key={step.id}
-            className={`wizard-step ${index === state.currentStep ? 'active' : ''} ${isStepComplete(index) ? 'completed' : ''}`}
-            onClick={() => goToStep(index)}
-          >
-            {index + 1}. {step.label}
-          </button>
-        ))}
-      </div>
+    <WizardContainer>
+      <StepIndicatorContainer>
+        {WIZARD_STEPS.map((step, index) => {
+          const isActive = index === state.currentStep;
+          const isCompleted = index < state.currentStep;
+          return (
+            <StepItem key={step.id} $isActive={isActive} $isCompleted={isCompleted}>
+              <StepCircle $isActive={isActive} $isCompleted={isCompleted}>
+                {index + 1}
+              </StepCircle>
+              <StepLabel $isActive={isActive}>{step.label}</StepLabel>
+            </StepItem>
+          );
+        })}
+      </StepIndicatorContainer>
 
-      <div className="wizard-content">
+      <WizardContent>
         {currentStepId === 'details' && (
           <div>
-            <h2>App Details</h2>
-            <p style={{ color: 'var(--text-secondary)', marginBottom: '1.5rem' }}>
+            <Heading level={2}>App Details</Heading>
+            <p style={{ color: '#9b9ea3', marginBottom: 24 }}>
               Enter the basic information for your Splunk app.
             </p>
 
-            <div className="form-group">
-              <label htmlFor="name">App Name *</label>
-              <input
-                id="name"
-                type="text"
+            <ControlGroup label="App Name" labelPosition="top" help="Required. The internal name of your app." error={touched.name && getFieldError('name', state.metadata.name, true)}>
+              <Text
                 value={state.metadata.name}
-                onChange={(e) => updateMetadata('name', e.target.value)}
+                onChange={(_e: unknown, { value }: { value: string }) => updateMetadata('name', value)}
+                onBlur={() => markTouched('name')}
+                error={!!getFieldError('name', state.metadata.name, true)}
                 placeholder="My Splunk App"
               />
-            </div>
+            </ControlGroup>
 
-            <div className="form-group">
-              <label htmlFor="displayName">Display Name</label>
-              <input
-                id="displayName"
-                type="text"
+            <ControlGroup label="Display Name" labelPosition="top" help="Shown in the Splunk UI. Defaults to App Name if empty.">
+              <Text
                 value={state.metadata.displayName}
-                onChange={(e) => updateMetadata('displayName', e.target.value)}
+                onChange={(_e: unknown, { value }: { value: string }) => updateMetadata('displayName', value)}
                 placeholder="My Splunk App (shown in Splunk UI)"
               />
-            </div>
+            </ControlGroup>
 
-            <div className="form-group">
-              <label htmlFor="description">Description</label>
-              <textarea
-                id="description"
+            <ControlGroup label="Description" labelPosition="top" help="A brief description of what your app does.">
+              <TextArea
                 value={state.metadata.description}
-                onChange={(e) => updateMetadata('description', e.target.value)}
-                placeholder="A brief description of what your app does..."
+                onChange={(_e: unknown, { value }: { value: string }) => updateMetadata('description', value)}
+                rowsMin={3}
               />
-            </div>
+            </ControlGroup>
 
-            <div className="form-group">
-              <label htmlFor="author">Author</label>
-              <input
-                id="author"
-                type="text"
+            <ControlGroup label="Author" labelPosition="top">
+              <Text
                 value={state.metadata.author}
-                onChange={(e) => updateMetadata('author', e.target.value)}
+                onChange={(_e: unknown, { value }: { value: string }) => updateMetadata('author', value)}
                 placeholder="Your name or organization"
               />
-            </div>
+            </ControlGroup>
 
-            <div className="form-group">
-              <label htmlFor="version">Version *</label>
-              <input
-                id="version"
-                type="text"
+            <ControlGroup label="Version" labelPosition="top" help="Required. Semantic version number." error={touched.version && getFieldError('version', state.metadata.version, true)}>
+              <Text
                 value={state.metadata.version}
-                onChange={(e) => updateMetadata('version', e.target.value)}
+                onChange={(_e: unknown, { value }: { value: string }) => updateMetadata('version', value)}
+                onBlur={() => markTouched('version')}
+                error={!!getFieldError('version', state.metadata.version, true)}
                 placeholder="1.0.0"
               />
-            </div>
+            </ControlGroup>
 
-            <div className="form-group">
-              <label htmlFor="appId">App ID (internal)</label>
-              <input
-                id="appId"
-                type="text"
+            <ControlGroup label="App ID (internal)" labelPosition="top" help="Auto-generated from App Name if left empty." error={touched.appId && getFieldError('appId', state.metadata.appId)}>
+              <Text
                 value={state.metadata.appId}
-                onChange={(e) => updateMetadata('appId', e.target.value)}
+                onChange={(_e: unknown, { value }: { value: string }) => updateMetadata('appId', value)}
+                onBlur={() => markTouched('appId')}
+                error={!!getFieldError('appId', state.metadata.appId)}
                 placeholder="my_splunk_app (auto-generated if empty)"
               />
-            </div>
+            </ControlGroup>
           </div>
         )}
 
@@ -151,97 +256,76 @@ export function Wizard({ state, onChange, onGenerate }: WizardProps) {
 
         {currentStepId === 'review' && (
           <div>
-            <h2>Review & Generate</h2>
-            <p style={{ color: 'var(--text-secondary)', marginBottom: '1.5rem' }}>
+            <Heading level={2}>Review &amp; Generate</Heading>
+            <p style={{ color: '#9b9ea3', marginBottom: 24 }}>
               Review your configuration before generating the app.
             </p>
 
-            <div className="review-section">
-              <h3>App Details</h3>
-              <div className="review-item">
-                <span className="label">Name:</span>
-                <span className="value">{state.metadata.name || '(not set)'}</span>
-              </div>
-              <div className="review-item">
-                <span className="label">Display Name:</span>
-                <span className="value">{state.metadata.displayName || state.metadata.name || '(not set)'}</span>
-              </div>
-              <div className="review-item">
-                <span className="label">Version:</span>
-                <span className="value">{state.metadata.version}</span>
-              </div>
-              <div className="review-item">
-                <span className="label">Author:</span>
-                <span className="value">{state.metadata.author || '(not set)'}</span>
-              </div>
-            </div>
+            <Heading level={3}>App Details</Heading>
+            <DefinitionList>
+              <DefinitionList.Term>Name</DefinitionList.Term>
+              <DefinitionList.Description>{state.metadata.name || '(not set)'}</DefinitionList.Description>
+              <DefinitionList.Term>Display Name</DefinitionList.Term>
+              <DefinitionList.Description>{state.metadata.displayName || state.metadata.name || '(not set)'}</DefinitionList.Description>
+              <DefinitionList.Term>Version</DefinitionList.Term>
+              <DefinitionList.Description>{state.metadata.version}</DefinitionList.Description>
+              <DefinitionList.Term>Author</DefinitionList.Term>
+              <DefinitionList.Description>{state.metadata.author || '(not set)'}</DefinitionList.Description>
+            </DefinitionList>
 
-            <div className="review-section">
-              <h3>Components</h3>
-              <div className="review-item">
-                <span className="label">Modular Inputs:</span>
-                <span className="value">{state.components.inputs.length}</span>
-              </div>
-              <div className="review-item">
-                <span className="label">Custom Commands:</span>
-                <span className="value">{state.components.commands.length}</span>
-              </div>
-              <div className="review-item">
-                <span className="label">Alert Actions:</span>
-                <span className="value">{state.components.alertActions.length}</span>
-              </div>
-              <div className="review-item">
-                <span className="label">Auth Config:</span>
-                <span className="value">{state.components.accounts.length} accounts</span>
-              </div>
-            </div>
+            <Heading level={3} style={{ marginTop: 24 }}>Components</Heading>
+            <DefinitionList>
+              <DefinitionList.Term>Modular Inputs</DefinitionList.Term>
+              <DefinitionList.Description>{state.components.inputs.length}</DefinitionList.Description>
+              <DefinitionList.Term>Custom Commands</DefinitionList.Term>
+              <DefinitionList.Description>{state.components.commands.length}</DefinitionList.Description>
+              <DefinitionList.Term>Alert Actions</DefinitionList.Term>
+              <DefinitionList.Description>{state.components.alertActions.length}</DefinitionList.Description>
+              <DefinitionList.Term>Auth Config</DefinitionList.Term>
+              <DefinitionList.Description>{state.components.accounts.length} accounts</DefinitionList.Description>
+            </DefinitionList>
 
-            <div className="review-section">
-              <h3>globalConfig.json Preview</h3>
-              <pre className="code-preview">
-                {JSON.stringify(
-                  createGlobalConfig(
-                    state.metadata.appId || state.metadata.name.toLowerCase().replace(/[^a-z0-9]/g, '_'),
-                    state.metadata.displayName || state.metadata.name,
-                    state.metadata.version,
-                    state.components
-                  ),
-                  null,
-                  2
-                )}
-              </pre>
-            </div>
+            <Heading level={3} style={{ marginTop: 24 }}>globalConfig.json Preview</Heading>
+            <CodePreview>
+              {JSON.stringify(
+                createGlobalConfig(
+                  state.metadata.appId || state.metadata.name.toLowerCase().replace(/[^a-z0-9]/g, '_'),
+                  state.metadata.displayName || state.metadata.name,
+                  state.metadata.version,
+                  state.components,
+                ),
+                null,
+                2,
+              )}
+            </CodePreview>
           </div>
         )}
-      </div>
+      </WizardContent>
 
-      <div className="wizard-actions">
-        <button
-          className="btn btn-secondary"
+      <WizardActions>
+        <Button
+          appearance="default"
           onClick={() => goToStep(state.currentStep - 1)}
           disabled={state.currentStep === 0}
-        >
-          Previous
-        </button>
+          label="Previous"
+        />
 
         {state.currentStep < WIZARD_STEPS.length - 1 ? (
-          <button
-            className="btn btn-primary"
+          <Button
+            appearance="primary"
             onClick={() => goToStep(state.currentStep + 1)}
             disabled={!canProceed()}
-          >
-            Next
-          </button>
+            label="Next"
+          />
         ) : (
-          <button
-            className="btn btn-primary"
+          <Button
+            appearance="primary"
             onClick={onGenerate}
             disabled={!state.metadata.name}
-          >
-            Generate App
-          </button>
+            label="Generate App"
+          />
         )}
-      </div>
-    </div>
+      </WizardActions>
+    </WizardContainer>
   );
 }

@@ -66,16 +66,7 @@ export interface ImportAnalysis {
   isUCCApp: boolean;
 }
 
-/**
- * Files that should be extracted for version control
- */
-export interface SourceExport {
-  projectFile: UCCProjectFile;
-  sourceFiles: Array<{
-    path: string;
-    content: string;
-  }>;
-}
+
 
 /**
  * Portable project file format (.uccproject)

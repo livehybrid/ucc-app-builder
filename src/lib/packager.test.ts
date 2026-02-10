@@ -83,7 +83,9 @@ describe('downloadBlob', () => {
       revokeObjectURL: revokeObjectURLMock,
     });
 
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     appendChildMock = vi.spyOn(document.body, 'appendChild').mockImplementation(((node: any) => node) as any) as any;
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     removeChildMock = vi.spyOn(document.body, 'removeChild').mockImplementation(((node: any) => node) as any) as any;
     vi.spyOn(document, 'createElement').mockImplementation(((tag: string) => {
       if (tag === 'a') {
@@ -94,6 +96,7 @@ describe('downloadBlob', () => {
         } as unknown as HTMLAnchorElement;
       }
       return document.createElement(tag);
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     }) as any);
   });
 
@@ -153,7 +156,9 @@ describe('downloadAppAsZip', () => {
       revokeObjectURL: revokeObjectURLMock,
     });
 
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     vi.spyOn(document.body, 'appendChild').mockImplementation(((node: any) => node) as any);
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     vi.spyOn(document.body, 'removeChild').mockImplementation(((node: any) => node) as any);
     vi.spyOn(document, 'createElement').mockImplementation(((tag: string) => {
       if (tag === 'a') {
@@ -164,6 +169,7 @@ describe('downloadAppAsZip', () => {
         } as unknown as HTMLAnchorElement;
       }
       return document.createElement(tag);
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     }) as any);
   });
 

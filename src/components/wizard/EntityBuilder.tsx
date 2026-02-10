@@ -1,27 +1,87 @@
 import { useState } from 'react';
+import styled from 'styled-components';
+import Button from '@splunk/react-ui/Button';
+import ControlGroup from '@splunk/react-ui/ControlGroup';
+import Text from '@splunk/react-ui/Text';
+import Select from '@splunk/react-ui/Select';
+import Switch from '@splunk/react-ui/Switch';
+import Number from '@splunk/react-ui/Number';
+import Heading from '@splunk/react-ui/Heading';
+import Badge from '@splunk/react-ui/Badge';
+import CollapsiblePanel from '@splunk/react-ui/CollapsiblePanel';
+import ColumnLayout from '@splunk/react-ui/ColumnLayout';
+import { variables } from '@splunk/themes';
 import type { EntityField, EntityType, ValidatorType } from '../../types/components';
 import { ENTITY_TYPES, VALIDATOR_TYPES, createDefaultEntityField } from '../../types/components';
+import Cross from '@splunk/react-icons/Cross';
 
 interface EntityBuilderProps {
   entities: EntityField[];
   onChange: (entities: EntityField[]) => void;
 }
 
+const EntityContainer = styled.div`
+  background: rgba(255, 255, 255, 0.03);
+  padding: 16px;
+  border-radius: 6px;
+  margin-top: 16px;
+  border: 1px solid ${variables.borderColor};
+`;
+
+const EntityItem = styled.div`
+  margin-bottom: 8px;
+`;
+
+const EntityHeaderRow = styled.div`
+  display: flex;
+  align-items: center;
+  gap: 8px;
+`;
+
+const EntityLabel = styled.span`
+  font-weight: 600;
+  flex: 1;
+`;
+
+const ValidatorRow = styled.div`
+  display: flex;
+  gap: 8px;
+  margin-bottom: 8px;
+  align-items: flex-end;
+`;
+
 export function EntityBuilder({ entities, onChange }: EntityBuilderProps) {
-  const [editingIndex, setEditingIndex] = useState<number | null>(null);
+  const [openPanels, setOpenPanels] = useState<Set<number>>(new Set());
+
+  const togglePanel = (index: number) => {
+    setOpenPanels((prev) => {
+      const next = new Set(prev);
+      if (next.has(index)) next.delete(index);
+      else next.add(index);
+      return next;
+    });
+  };
 
   const handleAdd = () => {
     onChange([...entities, createDefaultEntityField()]);
-    setEditingIndex(entities.length);
+    setOpenPanels((prev) => new Set([...prev, entities.length]));
   };
 
   const handleRemove = (index: number) => {
     const newEntities = [...entities];
     newEntities.splice(index, 1);
     onChange(newEntities);
-    setEditingIndex(null);
+    setOpenPanels((prev) => {
+      const next = new Set<number>();
+      prev.forEach((i) => {
+        if (i < index) next.add(i);
+        else if (i > index) next.add(i - 1);
+      });
+      return next;
+    });
   };
 
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const updateEntity = (index: number, field: string, value: any) => {
     const newEntities = [...entities];
     newEntities[index] = { ...newEntities[index], [field]: value };
@@ -31,12 +91,10 @@ export function EntityBuilder({ entities, onChange }: EntityBuilderProps) {
   const addValidator = (entityIndex: number) => {
     const entity = entities[entityIndex];
     const validators = entity.validators || [];
-    updateEntity(entityIndex, 'validators', [
-      ...validators,
-      { type: 'string' as ValidatorType }
-    ]);
+    updateEntity(entityIndex, 'validators', [...validators, { type: 'string' as ValidatorType }]);
   };
 
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const updateValidator = (entityIndex: number, validatorIndex: number, field: string, value: any) => {
     const entity = entities[entityIndex];
     const validators = [...(entity.validators || [])];
@@ -52,262 +110,185 @@ export function EntityBuilder({ entities, onChange }: EntityBuilderProps) {
   };
 
   return (
-    <div className="entity-builder">
-      <h4>Configuration Fields</h4>
-      <p className="help-text">Define the fields that users will configure in Splunk Manager.</p>
+    <EntityContainer>
+      <Heading level={4} style={{ color: '#65A637', marginBottom: 8 }}>
+        Configuration Fields
+      </Heading>
+      <p style={{ color: '#9b9ea3', fontSize: '0.875rem', marginBottom: 16 }}>
+        Define the fields that users will configure in Splunk Manager.
+      </p>
 
-      <div className="entity-list">
-        {entities.map((entity, index) => (
-          <div key={index} className={`entity-item ${editingIndex === index ? 'editing' : ''}`}>
-            <div className="entity-header" onClick={() => setEditingIndex(editingIndex === index ? null : index)}>
-              <span className="entity-label">{entity.label || '(Untitled Field)'}</span>
-              <span className="entity-type-badge">{entity.type}</span>
-              <button
-                className="btn-icon danger"
-                onClick={(e) => { e.stopPropagation(); handleRemove(index); }}
-              >
-                ✕
-              </button>
-            </div>
-
-            {editingIndex === index && (
-              <div className="entity-form">
-                <div className="form-row">
-                  <div className="form-group half">
-                    <label>Field Name (Internal)</label>
-                    <input
-                      type="text"
-                      value={entity.field}
-                      onChange={(e) => updateEntity(index, 'field', e.target.value)}
-                      placeholder="e.g. api_key"
-                    />
-                  </div>
-                  <div className="form-group half">
-                    <label>Display Label</label>
-                    <input
-                      type="text"
-                      value={entity.label}
-                      onChange={(e) => updateEntity(index, 'label', e.target.value)}
-                      placeholder="e.g. API Key"
-                    />
-                  </div>
-                </div>
-
-                <div className="form-row">
-                  <div className="form-group half">
-                    <label>Type</label>
-                    <select
-                      value={entity.type}
-                      onChange={(e) => updateEntity(index, 'type', e.target.value as EntityType)}
-                    >
-                      {ENTITY_TYPES.map(t => (
-                        <option key={t.type} value={t.type}>{t.label}</option>
-                      ))}
-                    </select>
-                  </div>
-                  <div className="form-group half checkbox-wrapper">
-                    <label>
-                      <input
-                        type="checkbox"
-                        checked={entity.required}
-                        onChange={(e) => updateEntity(index, 'required', e.target.checked)}
+      {entities.map((entity, index) => (
+        <EntityItem key={index}>
+          <CollapsiblePanel
+            title={
+              <EntityHeaderRow>
+                <EntityLabel>{entity.label || '(Untitled Field)'}</EntityLabel>
+                <Badge label={entity.type} />
+              </EntityHeaderRow>
+            }
+            open={openPanels.has(index)}
+            onChange={() => togglePanel(index)}
+            actions={
+              <Button
+                appearance="destructive"
+                icon={<Cross />}
+                onClick={(e: React.MouseEvent) => {
+                  e.stopPropagation();
+                  handleRemove(index);
+                }}
+              />
+            }
+          >
+            <div style={{ padding: '16px 0' }}>
+              <ColumnLayout>
+                <ColumnLayout.Row>
+                  <ColumnLayout.Column span={6}>
+                    <ControlGroup label="Field Name (Internal)" labelPosition="top">
+                      <Text
+                        value={entity.field}
+                        onChange={(_e: unknown, { value }: { value: string }) =>
+                          updateEntity(index, 'field', value)
+                        }
+                        placeholder="e.g. api_key"
                       />
-                      Required Field
-                    </label>
-                  </div>
-                </div>
+                    </ControlGroup>
+                  </ColumnLayout.Column>
+                  <ColumnLayout.Column span={6}>
+                    <ControlGroup label="Display Label" labelPosition="top">
+                      <Text
+                        value={entity.label}
+                        onChange={(_e: unknown, { value }: { value: string }) =>
+                          updateEntity(index, 'label', value)
+                        }
+                        placeholder="e.g. API Key"
+                      />
+                    </ControlGroup>
+                  </ColumnLayout.Column>
+                </ColumnLayout.Row>
 
-                <div className="form-group">
-                  <label>Default Value</label>
-                  <input
-                    type="text"
-                    value={String(entity.defaultValue || '')}
-                    onChange={(e) => updateEntity(index, 'defaultValue', e.target.value)}
-                  />
-                </div>
-
-                <div className="form-group">
-                  <label>Help Text</label>
-                  <input
-                    type="text"
-                    value={entity.help || ''}
-                    onChange={(e) => updateEntity(index, 'help', e.target.value)}
-                    placeholder="Instructions shown to the user"
-                  />
-                </div>
-
-                <div className="validators-section">
-                  <div className="section-header">
-                    <label>Validators</label>
-                    <button className="btn-small" onClick={() => addValidator(index)}>+ Add Validator</button>
-                  </div>
-
-                  {entity.validators?.map((validator, vIndex) => (
-                    <div key={vIndex} className="validator-item">
-                      <select
-                        value={validator.type}
-                        onChange={(e) => updateValidator(index, vIndex, 'type', e.target.value)}
+                <ColumnLayout.Row>
+                  <ColumnLayout.Column span={6}>
+                    <ControlGroup label="Type" labelPosition="top">
+                      <Select
+                        value={entity.type}
+                        onChange={(_e: unknown, { value }: { value: string | number | boolean }) =>
+                          updateEntity(index, 'type', String(value) as EntityType)
+                        }
                       >
-                        {VALIDATOR_TYPES.map(t => (
-                          <option key={t.type} value={t.type}>{t.label}</option>
+                        {ENTITY_TYPES.map((t) => (
+                          <Select.Option key={t.type} label={t.label} value={t.type} />
                         ))}
-                      </select>
+                      </Select>
+                    </ControlGroup>
+                  </ColumnLayout.Column>
+                  <ColumnLayout.Column span={6}>
+                    <ControlGroup label="Required" labelPosition="top">
+                      <Switch
+                        selected={entity.required}
+                        onClick={() => updateEntity(index, 'required', !entity.required)}
+                        appearance="toggle"
+                      >
+                        {entity.required ? 'Yes' : 'No'}
+                      </Switch>
+                    </ControlGroup>
+                  </ColumnLayout.Column>
+                </ColumnLayout.Row>
+              </ColumnLayout>
 
-                      {validator.type === 'string' && (
-                        <>
-                          <input
-                            type="number"
-                            placeholder="Min Len"
-                            value={validator.minLength || ''}
-                            onChange={(e) => updateValidator(index, vIndex, 'minLength', parseInt(e.target.value))}
-                            className="short-input"
-                          />
-                          <input
-                            type="number"
-                            placeholder="Max Len"
-                            value={validator.maxLength || ''}
-                            onChange={(e) => updateValidator(index, vIndex, 'maxLength', parseInt(e.target.value))}
-                            className="short-input"
-                          />
-                        </>
-                      )}
+              <ControlGroup label="Default Value" labelPosition="top">
+                <Text
+                  value={String(entity.defaultValue || '')}
+                  onChange={(_e: unknown, { value }: { value: string }) =>
+                    updateEntity(index, 'defaultValue', value)
+                  }
+                />
+              </ControlGroup>
 
-                      {validator.type === 'regex' && (
-                        <input
-                          type="text"
-                          placeholder="Pattern"
-                          value={validator.pattern || ''}
-                          onChange={(e) => updateValidator(index, vIndex, 'pattern', e.target.value)}
-                        />
-                      )}
+              <ControlGroup label="Help Text" labelPosition="top">
+                <Text
+                  value={entity.help || ''}
+                  onChange={(_e: unknown, { value }: { value: string }) =>
+                    updateEntity(index, 'help', value)
+                  }
+                  placeholder="Instructions shown to the user"
+                />
+              </ControlGroup>
 
-                      <input
-                        type="text"
-                        placeholder="Error Message"
-                        value={validator.errorMsg || ''}
-                        onChange={(e) => updateValidator(index, vIndex, 'errorMsg', e.target.value)}
-                        className="error-msg-input"
-                      />
-
-                      <button className="btn-icon danger" onClick={() => removeValidator(index, vIndex)}>✕</button>
-                    </div>
-                  ))}
+              {/* Validators */}
+              <div style={{ marginTop: 16, borderTop: `1px solid ${variables.borderColor}`, paddingTop: 16 }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 8 }}>
+                  <Heading level={5}>Validators</Heading>
+                  <Button appearance="default" onClick={() => addValidator(index)} label="+ Add Validator" />
                 </div>
+
+                {entity.validators?.map((validator, vIndex) => (
+                  <ValidatorRow key={vIndex}>
+                    <Select
+                      value={validator.type}
+                      onChange={(_e: unknown, { value }: { value: string | number | boolean }) =>
+                        updateValidator(index, vIndex, 'type', String(value))
+                      }
+                      style={{ width: 140 }}
+                    >
+                      {VALIDATOR_TYPES.map((t) => (
+                        <Select.Option key={t.type} label={t.label} value={t.type} />
+                      ))}
+                    </Select>
+
+                    {validator.type === 'string' && (
+                      <>
+                        <Number
+                          value={validator.minLength ?? undefined}
+                          onChange={(_e: unknown, { value }: { value?: number }) =>
+                            updateValidator(index, vIndex, 'minLength', value)
+                          }
+                          style={{ width: 90 }}
+                        />
+                        <Number
+                          value={validator.maxLength ?? undefined}
+                          onChange={(_e: unknown, { value }: { value?: number }) =>
+                            updateValidator(index, vIndex, 'maxLength', value)
+                          }
+                          style={{ width: 90 }}
+                        />
+                      </>
+                    )}
+
+                    {validator.type === 'regex' && (
+                      <Text
+                        placeholder="Pattern"
+                        value={validator.pattern || ''}
+                        onChange={(_e: unknown, { value }: { value: string }) =>
+                          updateValidator(index, vIndex, 'pattern', value)
+                        }
+                        style={{ flex: 1 }}
+                      />
+                    )}
+
+                    <Text
+                      placeholder="Error Message"
+                      value={validator.errorMsg || ''}
+                      onChange={(_e: unknown, { value }: { value: string }) =>
+                        updateValidator(index, vIndex, 'errorMsg', value)
+                      }
+                      style={{ flex: 1 }}
+                    />
+
+                    <Button
+                      appearance="destructive"
+                      icon={<Cross />}
+                      onClick={() => removeValidator(index, vIndex)}
+                    />
+                  </ValidatorRow>
+                ))}
               </div>
-            )}
-          </div>
-        ))}
-      </div>
+            </div>
+          </CollapsiblePanel>
+        </EntityItem>
+      ))}
 
-      <button className="btn btn-secondary full-width" onClick={handleAdd}>
-        + Add Field
-      </button>
-
-      <style>{`
-        .entity-builder {
-          background-color: rgba(255,255,255,0.05);
-          padding: 1rem;
-          border-radius: 4px;
-          margin-top: 1rem;
-        }
-        .entity-builder h4 {
-          margin-bottom: 0.5rem;
-          color: var(--splunk-green);
-        }
-        .entity-list {
-          margin-bottom: 1rem;
-        }
-        .entity-item {
-          background-color: var(--splunk-dark);
-          border: 1px solid var(--border-color);
-          margin-bottom: 0.5rem;
-          border-radius: 4px;
-        }
-        .entity-item.editing {
-          border-color: var(--splunk-green);
-        }
-        .entity-header {
-          padding: 0.75rem;
-          display: flex;
-          align-items: center;
-          cursor: pointer;
-        }
-        .entity-label {
-          font-weight: bold;
-          flex: 1;
-        }
-        .entity-type-badge {
-          background-color: rgba(255,255,255,0.1);
-          padding: 2px 6px;
-          border-radius: 4px;
-          font-size: 0.75rem;
-          margin-right: 0.5rem;
-        }
-        .entity-form {
-          padding: 1rem;
-          border-top: 1px solid var(--border-color);
-          background-color: rgba(0,0,0,0.2);
-        }
-        .form-row {
-          display: flex;
-          gap: 1rem;
-          margin-bottom: 1rem;
-        }
-        .half {
-          flex: 1;
-        }
-        .checkbox-wrapper {
-          display: flex;
-          align-items: flex-end;
-          padding-bottom: 0.75rem;
-        }
-        .btn-icon {
-          background: none;
-          border: none;
-          color: var(--text-secondary);
-          cursor: pointer;
-          font-size: 1rem;
-        }
-        .btn-icon:hover {
-          color: var(--text-primary);
-        }
-        .btn-icon.danger:hover {
-          color: #D32F2F;
-        }
-        .full-width {
-          width: 100%;
-        }
-        .validators-section {
-          margin-top: 1rem;
-          border-top: 1px solid rgba(255,255,255,0.1);
-          padding-top: 1rem;
-        }
-        .section-header {
-          display: flex;
-          justify-content: space-between;
-          margin-bottom: 0.5rem;
-        }
-        .btn-small {
-          background: none;
-          border: 1px solid var(--splunk-green);
-          color: var(--splunk-green);
-          border-radius: 4px;
-          padding: 2px 8px;
-          font-size: 0.75rem;
-          cursor: pointer;
-        }
-        .validator-item {
-          display: flex;
-          gap: 0.5rem;
-          margin-bottom: 0.5rem;
-        }
-        .short-input {
-          width: 80px;
-        }
-        .error-msg-input {
-          flex: 1;
-        }
-      `}</style>
-    </div>
+      <Button appearance="default" onClick={handleAdd} label="+ Add Field" inline={false} />
+    </EntityContainer>
   );
 }

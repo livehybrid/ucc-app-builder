@@ -1,10 +1,18 @@
 import { useState, useCallback } from 'react';
+import styled from 'styled-components';
+import ControlGroup from '@splunk/react-ui/ControlGroup';
+import Text from '@splunk/react-ui/Text';
+import Heading from '@splunk/react-ui/Heading';
+import Message from '@splunk/react-ui/Message';
+import WaitSpinner from '@splunk/react-ui/WaitSpinner';
+import File from '@splunk/react-ui/File';
+import { variables } from '@splunk/themes';
 import { generateIconSet, isValidImageFile } from '../../lib/imageUtils';
-import type { WizardState } from '../../types';
+import type { WizardState, BrandingConfig } from '../../types';
 
 interface BrandingStepProps {
   state: WizardState;
-  onChange: (field: string, value: any) => void;
+  onChange: (field: string, value: string | boolean | BrandingConfig) => void;
 }
 
 const NAV_COLOR_PRESETS = [
@@ -15,203 +23,235 @@ const NAV_COLOR_PRESETS = [
   { name: 'Red', color: '#D32F2F' },
 ];
 
+const IconPreviewRow = styled.div`
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  margin-top: 16px;
+`;
+
+const IconPreview = styled.div`
+  width: 72px;
+  height: 72px;
+  background: ${variables.backgroundColorDialog};
+  border: 1px solid ${variables.borderColor};
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 6px;
+  overflow: hidden;
+  flex-shrink: 0;
+
+  img {
+    max-width: 100%;
+    max-height: 100%;
+  }
+`;
+
+const SizeBadge = styled.span`
+  display: inline-block;
+  background: #65A637;
+  color: white;
+  padding: 2px 8px;
+  border-radius: 4px;
+  font-size: 0.75rem;
+  margin-right: 6px;
+`;
+
+const ColorPickerRow = styled.div`
+  display: flex;
+  align-items: center;
+  gap: 16px;
+`;
+
+const NativeColorInput = styled.input`
+  width: 50px;
+  height: 40px;
+  border: none;
+  border-radius: 4px;
+  cursor: pointer;
+  padding: 0;
+`;
+
+const ColorPresets = styled.div`
+  display: flex;
+  gap: 8px;
+  margin-top: 8px;
+`;
+
+const ColorPreset = styled.button<{ $color: string; $active: boolean }>`
+  width: 32px;
+  height: 32px;
+  border-radius: 6px;
+  border: 2px solid ${(props) => (props.$active ? '#fff' : 'transparent')};
+  cursor: pointer;
+  background-color: ${(props) => props.$color};
+  transition: border-color 0.15s;
+
+  &:hover {
+    border-color: rgba(255, 255, 255, 0.5);
+  }
+`;
+
+const NavPreview = styled.div<{ $color: string }>`
+  margin-top: 16px;
+  padding: 10px 16px;
+  border-radius: 6px;
+  color: white;
+  font-weight: bold;
+  display: flex;
+  align-items: center;
+  background-color: ${(props) => props.$color};
+`;
+
 export function BrandingStep({ state, onChange }: BrandingStepProps) {
   const [error, setError] = useState<string | null>(null);
   const [isProcessing, setIsProcessing] = useState(false);
+  const [uploadedFilename, setUploadedFilename] = useState<string | null>(null);
 
-  const handleLogoUpload = useCallback(async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
+  const handleRequestAdd: (files: globalThis.File[]) => void = useCallback(
+    async (files) => {
+      const file = files[0];
+      if (!file) return;
 
-    if (!isValidImageFile(file)) {
-      setError('Please upload a valid image file (PNG, JPG, SVG)');
-      return;
-    }
+      if (!isValidImageFile(file)) {
+        setError('Please upload a valid image file (PNG, JPG, SVG)');
+        return;
+      }
 
-    setIsProcessing(true);
-    setError(null);
+      setUploadedFilename(file.name);
+      setIsProcessing(true);
+      setError(null);
 
-    try {
-      // Create data URL for preview
-      const reader = new FileReader();
-      reader.onload = async (e) => {
-        const dataUrl = e.target?.result as string;
+      try {
+        const reader = new FileReader();
+        reader.onload = async (ev) => {
+          const dataUrl = ev.target?.result as string;
+          const icons = await generateIconSet(file);
+          const processedIcons = {
+            appIcon: icons['appIcon.png'],
+            appIcon2x: icons['appIcon_2x.png'],
+            appIconAlt: icons['appIconAlt.png'],
+            appIconAlt2x: icons['appIconAlt_2x.png'],
+          };
 
-        // Generate all icon sizes
-        const icons = await generateIconSet(file);
-
-        // Map to expected keys in BrandingConfig
-        const processedIcons = {
-          appIcon: icons['appIcon.png'],
-          appIcon2x: icons['appIcon_2x.png'],
-          appIconAlt: icons['appIconAlt.png'],
-          appIconAlt2x: icons['appIconAlt_2x.png'],
+          onChange('branding', {
+            ...state.branding,
+            logoFile: file,
+            logoDataUrl: dataUrl,
+            processedIcons,
+          });
+          setIsProcessing(false);
         };
-
-        onChange('branding', {
-          ...state.branding,
-          logoFile: file,
-          logoDataUrl: dataUrl,
-          processedIcons
-        });
-
+        reader.readAsDataURL(file);
+      } catch {
+        setError('Failed to process image');
         setIsProcessing(false);
-      };
-      reader.readAsDataURL(file);
-    } catch (err) {
-      setError('Failed to process image');
-      setIsProcessing(false);
-    }
+      }
+    },
+    [onChange, state.branding],
+  );
+
+  const handleRequestRemove = useCallback(() => {
+    setUploadedFilename(null);
+    onChange('branding', {
+      ...state.branding,
+      logoFile: null,
+      logoDataUrl: undefined,
+      processedIcons: undefined,
+    });
   }, [onChange, state.branding]);
 
   return (
     <div>
-      <h2>Branding</h2>
-      <p style={{ color: 'var(--text-secondary)', marginBottom: '1.5rem' }}>
+      <Heading level={2}>Branding</Heading>
+      <p style={{ color: '#9b9ea3', marginBottom: 24 }}>
         Customize the look of your app in Splunk.
       </p>
 
-      <div className="form-group">
-        <label>App Icon</label>
-        <p className="help-text">Upload a high-resolution square image. We'll generate all required sizes for Splunk.</p>
-
-        <div className="logo-upload-container">
-          <div className="logo-preview">
-            {state.branding.logoDataUrl ? (
-              <img src={state.branding.logoDataUrl} alt="App Logo" />
-            ) : (
-              <div className="logo-placeholder">No Icon</div>
-            )}
-          </div>
-
-          <div className="upload-controls">
-            <input
-              type="file"
-              id="logo-upload"
-              accept="image/*"
-              onChange={handleLogoUpload}
-              disabled={isProcessing}
-              style={{ display: 'none' }}
+      <ControlGroup label="App Icon" labelPosition="top" help="Upload a high-resolution square image. All required Splunk icon sizes will be generated automatically.">
+        <File
+          accept="image/png,image/jpeg,image/svg+xml,.png,.jpg,.jpeg,.svg"
+          onRequestAdd={handleRequestAdd}
+          onRequestRemove={handleRequestRemove}
+          disabled={isProcessing}
+          supportsMessage="Supports PNG, JPG, and SVG images"
+        >
+          {uploadedFilename && (
+            <File.Item
+              name={uploadedFilename}
+              uploadPercentage={isProcessing ? 50 : undefined}
             />
-            <label htmlFor="logo-upload" className="btn btn-secondary">
-              {isProcessing ? 'Processing...' : 'Upload Icon'}
-            </label>
-            {state.branding.logoDataUrl && (
-              <div className="generated-previews">
-                <span>Generated sizes:</span>
-                <div className="mini-previews">
-                  <div title="appIcon.png (36x36)">36px</div>
-                  <div title="appIcon_2x.png (72x72)">72px</div>
-                </div>
-              </div>
-            )}
-          </div>
-        </div>
-        {error && <div className="error-text">{error}</div>}
-      </div>
+          )}
+        </File>
 
-      <div className="form-group">
-        <label>Navigation Bar Color</label>
-        <div className="color-picker">
-          <input
+        {isProcessing && (
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 12 }}>
+            <WaitSpinner />
+            <span style={{ color: '#9b9ea3', fontSize: '0.85rem' }}>Generating icon sizes...</span>
+          </div>
+        )}
+
+        {state.branding.logoDataUrl && !isProcessing && (
+          <IconPreviewRow>
+            <IconPreview>
+              <img src={state.branding.logoDataUrl} alt="App Icon" />
+            </IconPreview>
+            <div>
+              <div style={{ color: '#9b9ea3', fontSize: '0.85rem', marginBottom: 4 }}>Generated sizes:</div>
+              <SizeBadge>36px</SizeBadge>
+              <SizeBadge>72px</SizeBadge>
+            </div>
+          </IconPreviewRow>
+        )}
+
+        {error && (
+          <div style={{ marginTop: 8 }}>
+            <Message type="error">{error}</Message>
+          </div>
+        )}
+      </ControlGroup>
+
+      <ControlGroup label="Navigation Bar Color" labelPosition="top">
+        <ColorPickerRow>
+          <NativeColorInput
             type="color"
             value={state.branding.navBarColor}
             onChange={(e) => onChange('branding', { ...state.branding, navBarColor: e.target.value })}
           />
-          <input
-            type="text"
+          <Text
             value={state.branding.navBarColor}
-            onChange={(e) => onChange('branding', { ...state.branding, navBarColor: e.target.value })}
-            style={{ width: '120px' }}
+            onChange={(_e: unknown, { value }: { value: string }) =>
+              onChange('branding', { ...state.branding, navBarColor: value })
+            }
+            style={{ width: 120 }}
           />
-        </div>
-        <div className="color-presets" style={{ marginTop: '0.5rem' }}>
+        </ColorPickerRow>
+        <ColorPresets>
           {NAV_COLOR_PRESETS.map((preset) => (
-            <button
+            <ColorPreset
               key={preset.color}
-              className={`color-preset ${state.branding.navBarColor === preset.color ? 'active' : ''}`}
-              style={{ backgroundColor: preset.color }}
+              $color={preset.color}
+              $active={state.branding.navBarColor === preset.color}
               onClick={() => onChange('branding', { ...state.branding, navBarColor: preset.color })}
               title={preset.name}
             />
           ))}
-        </div>
-      </div>
+        </ColorPresets>
+      </ControlGroup>
 
-      <div className="form-group">
-        <label>Preview</label>
-        <div
-          className="nav-preview"
-          style={{ backgroundColor: state.branding.navBarColor }}
-        >
+      <ControlGroup label="Preview" labelPosition="top">
+        <NavPreview $color={state.branding.navBarColor}>
           {state.branding.logoDataUrl && (
             <img
               src={state.branding.logoDataUrl}
               alt="Logo"
-              style={{ height: '20px', width: '20px', marginRight: '10px', objectFit: 'contain' }}
+              style={{ height: 20, width: 20, marginRight: 10, objectFit: 'contain' }}
             />
           )}
           {state.metadata.displayName || state.metadata.name || 'Your App'}
-        </div>
-      </div>
-
-      <style>{`
-        .logo-upload-container {
-          display: flex;
-          gap: 1.5rem;
-          align-items: center;
-          margin-bottom: 1rem;
-          background-color: var(--splunk-dark);
-          padding: 1rem;
-          border-radius: 4px;
-        }
-        .logo-preview {
-          width: 80px;
-          height: 80px;
-          background-color: var(--splunk-gray);
-          border: 1px dashed var(--border-color);
-          display: flex;
-          align-items: center;
-          justify-content: center;
-          border-radius: 4px;
-          overflow: hidden;
-        }
-        .logo-preview img {
-          max-width: 100%;
-          max-height: 100%;
-        }
-        .logo-placeholder {
-          color: var(--text-secondary);
-          font-size: 0.75rem;
-          text-align: center;
-        }
-        .help-text {
-          font-size: 0.875rem;
-          color: var(--text-secondary);
-          margin-bottom: 0.5rem;
-        }
-        .generated-previews {
-          margin-top: 0.5rem;
-          font-size: 0.75rem;
-          color: var(--text-secondary);
-        }
-        .mini-previews {
-          display: flex;
-          gap: 0.5rem;
-          margin-top: 0.25rem;
-        }
-        .mini-previews div {
-          background-color: var(--splunk-green);
-          color: white;
-          padding: 2px 6px;
-          border-radius: 2px;
-        }
-        .error-text {
-          color: #D32F2F;
-          font-size: 0.875rem;
-          margin-top: 0.5rem;
-        }
-      `}</style>
+        </NavPreview>
+      </ControlGroup>
     </div>
   );
 }

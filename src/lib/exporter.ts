@@ -7,7 +7,6 @@ import JSZip from 'jszip';
 import type { UCCBuildManifest, UCCProjectFile } from '../types/manifest';
 import type { ImportAnalysis } from '../types/manifest';
 import { VirtualFileSystem } from './vfs';
-import { downloadBlob } from './packager';
 
 /**
  * Create a .uccproject file from import analysis
@@ -80,16 +79,7 @@ function convertToSourcePath(filePath: string, appId: string): string {
   return path;
 }
 
-/**
- * Download source files as ZIP
- */
-export async function downloadSourceZip(
-  analysis: ImportAnalysis,
-  manifest: UCCBuildManifest
-): Promise<void> {
-  const blob = await exportSourceAsZip(analysis, manifest);
-  downloadBlob(blob, `${analysis.appId}-source.zip`);
-}
+
 
 /**
  * Generate a summary of what will be exported vs regenerated
@@ -155,4 +145,56 @@ export function createPackageStructure(
   }
 
   return packageVfs;
+}
+
+/**
+ * Create ImportAnalysis from VFS state
+ */
+function createAnalysisFromVFS(vfs: VirtualFileSystem, appId: string): ImportAnalysis {
+  const files = vfs.listAllFiles();
+  const globalConfigFile = files.find(f => f.name === 'globalConfig.json');
+  let globalConfig = null;
+  
+  if (globalConfigFile) {
+    try {
+      globalConfig = JSON.parse(globalConfigFile.content);
+    } catch (e) {
+      console.warn('Failed to parse globalConfig.json', e);
+    }
+  }
+
+  return {
+    appId,
+    displayName: appId, // Could extract from globalConfig
+    version: '1.0.0', // Could extract
+    globalConfig,
+    files: files.map(f => ({
+      path: f.path,
+      content: f.content,
+      origin: f.source === 'generated' ? 'generated' : f.source === 'modified' ? 'modified-generated' : 'source',
+      checksum: '', // Not used for export
+    })),
+    warnings: [],
+    isUCCApp: true,
+  };
+}
+
+/**
+ * Export source files from VFS as ZIP
+ */
+export async function exportSourceZipFromVFS(vfs: VirtualFileSystem, appId: string): Promise<Blob> {
+  const analysis = createAnalysisFromVFS(vfs, appId);
+  // Create a dummy manifest for the build tracking
+  const manifest: UCCBuildManifest = {
+    version: '1.0.0',
+    appId,
+    displayName: appId,
+    appVersion: '1.0.0',
+    createdAt: new Date().toISOString(),
+    updatedAt: new Date().toISOString(),
+    globalConfigPath: 'globalConfig.json',
+    files: [],
+    build: { builderVersion: '1.0.0' }
+  };
+  return exportSourceAsZip(analysis, manifest);
 }

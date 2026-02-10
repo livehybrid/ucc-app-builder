@@ -57,6 +57,21 @@ export class FileHandler {
       } else {
         await fs.writeFile(fullPath, file.content, 'utf-8');
       }
+
+      // ucc-gen build expects globalConfig.json in the workDir root (cwd), not under appId/
+      const pathSegments = file.path.replace(/^\/+/, '').split('/');
+      if (
+        pathSegments.length === 2 &&
+        pathSegments[1] === 'globalConfig.json' &&
+        pathSegments[0].length > 0
+      ) {
+        const workDirGlobalConfigPath = path.join(baseDir, 'globalConfig.json');
+        if (this.isBase64(file.content) && this.isBinaryExtension('globalConfig.json')) {
+          await fs.writeFile(workDirGlobalConfigPath, Buffer.from(file.content, 'base64'));
+        } else {
+          await fs.writeFile(workDirGlobalConfigPath, file.content, 'utf-8');
+        }
+      }
     }
   }
 

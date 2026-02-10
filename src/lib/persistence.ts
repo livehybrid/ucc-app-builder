@@ -9,11 +9,15 @@ import { DEFAULT_WIZARD_STATE } from '../types/app';
 const STORAGE_KEY = 'splunk-app-builder-state';
 const VFS_STORAGE_KEY = 'splunk-app-builder-vfs';
 
+import type { GitHubSession } from '../types/github';
+
 interface PersistedState {
   mode: 'welcome' | 'wizard' | 'import' | 'files';
   wizardState: WizardState;
   appName: string;
   generated: boolean;
+  developerMode?: boolean;
+  gitHubSession?: GitHubSession;
   savedAt: string;
 }
 
@@ -58,6 +62,9 @@ export function loadState(): PersistedState | null {
     // Merge with defaults to handle any missing properties from older versions
     return {
       ...state,
+      developerMode: state.developerMode || false,
+      // gitHubSession is optional, no default needed
+
       wizardState: {
         ...DEFAULT_WIZARD_STATE,
         ...state.wizardState,
