@@ -64,11 +64,18 @@ export async function exportSourceAsZip(
 /**
  * Convert a full app path to a source path (package/ structure)
  */
-function convertToSourcePath(filePath: string, appId: string): string {
-  // Remove app ID prefix if present
-  let path = filePath;
+export function convertToSourcePath(filePath: string, appId: string): string {
+  // Normalize leading slash
+  let path = filePath.startsWith('/') ? filePath.slice(1) : filePath;
+
+  // Remove app ID prefix if present (e.g. "myapp/package/..." -> "package/...")
   if (path.startsWith(`${appId}/`)) {
     path = path.slice(appId.length + 1);
+  }
+
+  // globalConfig.json should strictly be at the root
+  if (path === 'globalConfig.json') {
+    return path;
   }
 
   // If not already in package/, add it
@@ -77,6 +84,26 @@ function convertToSourcePath(filePath: string, appId: string): string {
   }
 
   return path;
+}
+
+/**
+ * Extract App ID from globalConfig.json in VFS
+ */
+export function getAppIdFromVFS(vfs: VirtualFileSystem, fallback: string): string {
+  const files = vfs.listAllFiles();
+  const globalConfigFile = files.find(f => f.name === 'globalConfig.json');
+  
+  if (globalConfigFile) {
+    try {
+      const globalConfig = JSON.parse(globalConfigFile.content);
+      if (globalConfig?.meta?.name) {
+        return globalConfig.meta.name;
+      }
+    } catch (e) {
+      console.warn('Failed to parse globalConfig.json', e);
+    }
+  }
+  return fallback;
 }
 
 
@@ -150,10 +177,11 @@ export function createPackageStructure(
 /**
  * Create ImportAnalysis from VFS state
  */
-function createAnalysisFromVFS(vfs: VirtualFileSystem, appId: string): ImportAnalysis {
+function createAnalysisFromVFS(vfs: VirtualFileSystem, fallbackAppId: string): ImportAnalysis {
   const files = vfs.listAllFiles();
   const globalConfigFile = files.find(f => f.name === 'globalConfig.json');
   let globalConfig = null;
+  const appId = getAppIdFromVFS(vfs, fallbackAppId);
   
   if (globalConfigFile) {
     try {

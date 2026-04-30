@@ -5,6 +5,7 @@ import {
   createProjectFile,
   exportSourceAsZip,
   createPackageStructure,
+  exportSourceZipFromVFS,
 } from './exporter';
 import { createManifestFromImport } from './importer';
 import { VirtualFileSystem } from './vfs';
@@ -186,6 +187,75 @@ describe('exportSourceAsZip', () => {
 
     // Should be restructured to package/bin/
     expect(filenames.some(f => f.includes('package/bin/script.py'))).toBe(true);
+  });
+
+  it('should handle VFS paths with leading slashes', async () => {
+    const analysis: ImportAnalysis = {
+      appId: 'slash_test',
+      displayName: 'Slash Test',
+      version: '1.0.0',
+      globalConfig: {},
+      isUCCApp: true,
+      warnings: [],
+      files: [
+        { path: '/slash_test/package/bin/test.py', origin: 'source', content: '# test', checksum: 'a' },
+      ],
+    };
+    const manifest = createManifestFromImport(analysis);
+
+    const blob = await exportSourceAsZip(analysis, manifest);
+    const zip = await JSZip.loadAsync(blob);
+
+    const filenames = Object.keys(zip.files);
+    
+    // Should be package/bin/test.py, NOT package/slash_test/package/bin/test.py
+    expect(filenames.some(f => f === 'package/bin/test.py')).toBe(true);
+    // Should remove app ID from path
+    expect(filenames.some(f => f.includes('slash_test') && !f.endsWith('.uccproject'))).toBe(false);
+    // Should remove app ID from path
+    expect(filenames.some(f => f.includes('slash_test') && !f.endsWith('.uccproject'))).toBe(false);
+  });
+
+  it('should keep globalConfig.json at root (not in package/)', async () => {
+    const analysis: ImportAnalysis = {
+      appId: 'root_test',
+      displayName: 'Root Test',
+      version: '1.0.0',
+      globalConfig: {},
+      isUCCApp: true,
+      warnings: [],
+      files: [
+        { path: '/root_test/globalConfig.json', origin: 'source', content: '{}', checksum: 'a' },
+        { path: '/root_test/package/default/app.conf', origin: 'source', content: '', checksum: 'b' },
+      ],
+    };
+    const manifest = createManifestFromImport(analysis);
+
+    const blob = await exportSourceAsZip(analysis, manifest);
+    const zip = await JSZip.loadAsync(blob);
+    const filenames = Object.keys(zip.files);
+
+    expect(filenames).toContain('globalConfig.json');
+    expect(filenames).not.toContain('package/globalConfig.json');
+    expect(filenames).toContain('package/default/app.conf');
+  });
+
+  it('should auto-detect appId from globalConfig content', async () => {
+    // Setup VFS with files using 'real_id', but pass 'WRONG_ID' as fallback
+    const vfs = new VirtualFileSystem();
+    vfs.writeFile('/real_id/globalConfig.json', JSON.stringify({ meta: { name: 'real_id' } }));
+    vfs.writeFile('/real_id/package/default/app.conf', '# config');
+
+    // Passing 'WRONG_ID' simulates the mismatch from App.tsx (appName vs appId)
+    const blob = await exportSourceZipFromVFS(vfs, 'WRONG_ID'); 
+    
+    const zip = await JSZip.loadAsync(blob);
+    const filenames = Object.keys(zip.files);
+
+    // If auto-detection works, 'real_id' prefix is stripped
+    expect(filenames).toContain('package/default/app.conf');
+    expect(filenames.some(f => f.includes('real_id') && !f.endsWith('.uccproject'))).toBe(false);
+    expect(filenames.some(f => f.includes('package/real_id/package'))).toBe(false);
   });
 });
 

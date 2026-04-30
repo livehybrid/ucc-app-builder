@@ -19,7 +19,10 @@ import { AIChatPanel } from './components/AIChatPanel';
 import { GitHubPanel } from './components/GitHubPanel';
 import type { GitHubSession } from './types/github';
 import Modal from '@splunk/react-ui/Modal';
-import { VirtualFileSystem, generateSplunkApp, downloadAppAsZip, loadImportToVFS } from './lib';
+import { VirtualFileSystem } from './lib/vfs';
+import { generateSplunkApp } from './lib/generator';
+import { downloadAppAsZip } from './lib/packager';
+import { loadImportToVFS } from './lib/importer';
 import { saveState, loadState, clearState, saveVFS, loadVFS, hasSavedState } from './lib/persistence';
 import type { WizardState, ImportAnalysis } from './types';
 import { DEFAULT_WIZARD_STATE } from './types';
@@ -705,6 +708,7 @@ function App() {
         open={chatOpen}
         onRequestClose={() => setChatOpen(false)}
         vfs={vfs}
+        onBuildTrigger={handleGenerate}
         onVfsChange={() => setVfsVersion(v => v + 1)}
         context={{
           globalConfig: vfs.readFile('globalConfig.json') ?? undefined,

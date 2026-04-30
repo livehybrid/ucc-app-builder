@@ -39,8 +39,11 @@ const minimalState = {
       displayName: 'Test App',
       version: '1.0.0',
       author: 'Tester',
+      email: 'tester@example.com',
       description: 'A test app',
       appId: 'test_app',
+      licenseName: 'MIT',
+      licenseUri: 'https://opensource.org/licenses/MIT',
     },
     branding: {
       logoFile: null,

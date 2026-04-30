@@ -12,6 +12,7 @@ import type { VirtualFileSystem } from '../lib/vfs';
 import type { VFSNode, VFSDirectory, VFSFile } from '../types/vfs';
 import { SpecParser } from '../lib/specParser';
 import { SPLUNK_SPECS } from '../lib/splunkSpecs';
+import { SPLUNK_SDK_REFERENCE } from '../lib/splunkSdkReference';
 import uccSchema from '../lib/uccSchema.json';
 import type { WizardState } from '../types/app';
 import { ComponentsStep } from './wizard/ComponentsStep';
@@ -186,6 +187,7 @@ export function FileBrowser({ vfs, wizardState, developerMode = false, onUpdateC
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const monacoRef = useRef<any>(null);
   const specParser = useRef(new SpecParser());
+  const pythonAssistRegistered = useRef(false);
   const modalReturnRef = useRef<HTMLButtonElement>(null);
   const selectedPathRef = useRef(selectedPath);
   selectedPathRef.current = selectedPath;
@@ -201,6 +203,21 @@ export function FileBrowser({ vfs, wizardState, developerMode = false, onUpdateC
         fileMatch: ['globalConfig.json'],
         schema: uccSchema,
       }],
+    });
+
+    // Add Save Command (Ctrl+S / Cmd+S)
+    editor.addCommand(monaco.KeyMod.CtrlCmd | monaco.KeyCode.KeyS, () => {
+      const currentPath = selectedPathRef.current;
+      if (currentPath) {
+        // Use editor.getValue() to get the most up-to-date content directly from Monaco
+        const content = editor.getValue();
+        vfs.writeFile(currentPath, content);
+        
+        // Update state to reflect saved status
+        setEditedContent(content);
+        setHasUnsavedChanges(false);
+        refreshTree();
+      }
     });
 
     monaco.languages.register({ id: 'splunk-conf' });
@@ -335,6 +352,84 @@ export function FileBrowser({ vfs, wizardState, developerMode = false, onUpdateC
         return { suggestions };
       },
     });
+
+    if (!pythonAssistRegistered.current) {
+      pythonAssistRegistered.current = true;
+
+      monaco.languages.registerCompletionItemProvider('python', {
+        triggerCharacters: ['.', '(', '_'],
+        provideCompletionItems: () => {
+          const suggestions = SPLUNK_SDK_REFERENCE.map((item) => ({
+            label: item.symbol,
+            kind: monaco.languages.CompletionItemKind.Function,
+            insertText: item.symbol,
+            detail: item.signature,
+            documentation: `${item.module}\n\n${item.description}`,
+          }));
+
+          const uccSnippets = [
+            {
+              label: 'UCC stream_events helper',
+              kind: monaco.languages.CompletionItemKind.Snippet,
+              insertText: [
+                'def stream_events(helper, ew):',
+                '    """Collect and emit events."""',
+                '    data = {"status": "ok"}',
+                '    event = helper.new_event(',
+                '        source="${1:my_input}",',
+                '        index=helper.get_output_index(),',
+                '        sourcetype="${2:my_sourcetype}",',
+                '        data=json.dumps(data),',
+                '    )',
+                '    ew.write_event(event)',
+              ].join('\n'),
+              insertTextRules: monaco.languages.CompletionItemInsertTextRule.InsertAsSnippet,
+              documentation: 'UCC helper-style stream_events template.',
+            },
+            {
+              label: 'splunklib modular input skeleton',
+              kind: monaco.languages.CompletionItemKind.Snippet,
+              insertText: [
+                'class ${1:MyInput}(Script):',
+                '    def get_scheme(self):',
+                '        scheme = Scheme("${2:my_input}")',
+                '        scheme.add_argument(Argument(name="name", required_on_create=True))',
+                '        return scheme',
+                '',
+                '    def validate_input(self, definition):',
+                '        return',
+                '',
+                '    def stream_events(self, inputs, ew):',
+                '        for stanza, item in inputs.inputs.items():',
+                '            event = Event(data="${3:payload}", stanza=stanza)',
+                '            ew.write_event(event)',
+              ].join('\n'),
+              insertTextRules: monaco.languages.CompletionItemInsertTextRule.InsertAsSnippet,
+              documentation: 'splunklib modular input skeleton.',
+            },
+          ];
+
+          return { suggestions: [...suggestions, ...uccSnippets] };
+        },
+      });
+
+      monaco.languages.registerHoverProvider('python', {
+        provideHover: (model: { getWordAtPosition: (position: { lineNumber: number; column: number }) => { word: string } | null }, position: { lineNumber: number; column: number }) => {
+          const word = model.getWordAtPosition(position)?.word;
+          if (!word) return null;
+          const match = SPLUNK_SDK_REFERENCE.find((entry) => entry.symbol === word || entry.symbol.endsWith(`.${word}`));
+          if (!match) return null;
+          return {
+            contents: [
+              { value: `**${match.symbol}**` },
+              { value: `\`${match.signature}\`` },
+              { value: `${match.module}` },
+              { value: `${match.description}` },
+            ],
+          };
+        },
+      });
+    }
   };
 
   // Validation Effect

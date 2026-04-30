@@ -28,3 +28,11 @@ Thumbs.db
 
 # TypeScript
 *.tsbuildinfo
+
+# Server build output
+dist-server/
+
+# ATLAS framework data
+data/
+memory/logs/
+.tmp/

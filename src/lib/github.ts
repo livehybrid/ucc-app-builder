@@ -1,5 +1,6 @@
 import { GitHubAuth, GitHubUser, GitHubRepo, DeviceFlowResponse } from '../types/github';
 import type { VirtualFileSystem } from './vfs';
+import { convertToSourcePath, getAppIdFromVFS } from './exporter';
 
 // Client ID is now provided by the user in the UI 
 
@@ -363,14 +364,21 @@ export async function pushFiles(
   // This lets GitHub create the blobs as part of the tree creation
   const treeItems: Record<string, unknown>[] = [];
   const files = vfs.toSnapshot().files;
+  
+  // Try to detect the real app ID from globalConfig to prevent nesting issues
+  const appId = getAppIdFromVFS(vfs, repoName);
 
   for (const file of files) {
     if (filesToIgnore.includes(file.path)) continue;
     // Basic ignore logic
     if (file.path.includes('.git/')) continue;
+    
+    // Convert VFS path (e.g. /my_app/package/...) to source structure (package/...)
+    // This handles removing the app ID prefix and ensuring proper package/ nesting
+    const sourcePath = convertToSourcePath(file.path, appId);
 
     treeItems.push({
-      path: file.path.startsWith('/') ? file.path.substring(1) : file.path, // Remove leading slash
+      path: sourcePath,
       mode: '100644', // normal file
       type: 'blob',
       content: file.content, // Use inline content instead of separate blob creation

@@ -1,0 +1,5 @@
+{
+  "difficulty": "hard",
+  "tags": ["oauth", "accounts", "modular-input", "security"],
+  "description": "Configure OAuth client credentials account wiring and connect it to a generated modular input."
+}

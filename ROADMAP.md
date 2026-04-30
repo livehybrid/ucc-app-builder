@@ -403,6 +403,41 @@ Reference for custom command configuration:
 
 ---
 
+## Agent Rebuild (Nov 2026)
+
+Research + implementation to turn the AI chat panel into a **Lovable-for-Splunk**
+class agent. Full rationale in [`docs/research/00-synthesis.md`](docs/research/00-synthesis.md).
+
+### Agent Phase 1 (SHIPPED — branch `feat/agent-rebuild`)
+
+- [x] Research: SOTA agent architectures, models, tool patterns, RAG, UX, security
+- [x] Research: OSS coding-agent repos + Kimi K2.6 + local-RAG alternatives
+- [x] New edit tools: `apply_patch` (Aider-style fuzzy diff), `create_file`
+- [x] Planning / memory tools: `todo_write`, `record_decision`, `read_memory`, `write_memory`
+- [x] Domain tools (self-hostable, no embeddings): `get_stanza_spec`, `list_stanzas` backed by a bundled `.conf.spec` parser
+- [x] Verify-loop tools: `run_ucc_gen`, `run_appinspect`, `install_to_splunk_docker`, `browser_check`
+- [x] Model profile env: `MODEL_PROFILE` = `kimi-single` (default) / `anthropic-multi` / `openai-multi` / `local-ollama`
+- [x] Local JSONL trace sink (`.ucc-agent/traces/*.jsonl`); Langfuse optional
+- [x] Playwright E2E harness + smoke test (`npm run test:e2e`)
+- [x] UCC-bench v0 with runner + one task (`npm run bench`)
+- [x] Server-side Splunk Docker installer + AppInspect wrapper
+
+### Agent Phase 2 (NEXT)
+
+- [ ] Server-side Planner / Executor loop with streaming SSE
+- [ ] `AIChatPanel` refactor — plan view, todo tracker, decision log UI
+- [ ] Approval policy: auto-allow reads + spec lookups; human-in-loop for Docker / network / writes outside `package/`
+- [ ] Add 4 more UCC-bench tasks (alert action, custom command, OAuth app, adaptive-response)
+- [ ] FlexSearch index over bundled add-on examples for `consult_documentation`
+- [ ] Kimi K2.6 integration tests against OpenRouter + Ollama
+
+### Agent Phase 3
+
+- [ ] Per-session sandbox (Firecracker/gVisor)
+- [ ] Prompt-injection classifier on tool outputs
+- [ ] Langfuse optional sink
+- [ ] Live preview of running Splunk add-on
+
 ## Changelog
 
 | Date | Change |
@@ -411,3 +446,4 @@ Reference for custom command configuration:
 | 2024-02-05 | Phase 1 complete - Foundation & Import/Export |
 | 2024-02-05 | 76 tests passing, 93%+ library coverage |
 | 2024-02-05 | User feedback incorporated - Phase 2 tasks defined |
+| 2026-11-22 | Agent rebuild Phase 1 shipped — new tools, Playwright, Docker install, Kimi default |

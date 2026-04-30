@@ -13,8 +13,11 @@ describe('generateSplunkApp', () => {
       displayName: 'Test App Display',
       description: 'A test application',
       author: 'Test Author',
+      email: 'test@example.com',
       version: '1.0.0',
       appId: 'test_app',
+      licenseName: 'Apache-2.0',
+      licenseUri: 'https://www.apache.org/licenses/LICENSE-2.0',
     },
     branding: {
       navBarColor: '#FF5733',

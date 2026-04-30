@@ -83,10 +83,63 @@ const FieldRow = styled.div`
   align-items: flex-end;
 `;
 
+import { OAuthWizard, OAuthConfiguration } from './OAuthWizard';
+
 export function ComponentsStep({ config, onChange }: ComponentsStepProps) {
   const [activeTab, setActiveTab] = useState('inputs');
   const [openPanels, setOpenPanels] = useState<Set<string>>(new Set());
   const [isTemplateGalleryOpen, setIsTemplateGalleryOpen] = useState(false);
+  
+  // OAuth Wizard state
+  const [isOAuthWizardOpen, setIsOAuthWizardOpen] = useState(false);
+  const [activeAccountIndex, setActiveAccountIndex] = useState<number | null>(null);
+
+  const openOAuthWizard = (index: number) => {
+      setActiveAccountIndex(index);
+      setIsOAuthWizardOpen(true);
+  };
+
+  const handleOAuthSave = (oauthConfig: OAuthConfiguration) => {
+      if (activeAccountIndex !== null) {
+          const newAccounts = [...config.accounts];
+          const acc = newAccounts[activeAccountIndex];
+          
+          // Map wizard config to account config
+          const updatedAccount = {
+              ...acc,
+              authType: oauthConfig.authType === 'oauth2' ? 'oauth' : oauthConfig.authType === 'api_key' ? 'apikey' : 'basic',
+              name: oauthConfig.label ? oauthConfig.label.toLowerCase().replace(/[^a-z0-9]/g, '_') : acc.name,
+              oauth: oauthConfig.authType === 'oauth2' ? {
+                  clientId: oauthConfig.clientId,
+                  clientSecret: oauthConfig.clientSecret,
+                  authUrl: oauthConfig.authUrl,
+                  tokenUrl: oauthConfig.tokenUrl,
+                  redirectUri: oauthConfig.redirectUri,
+                  scopes: oauthConfig.scopes
+              } : undefined
+          } as AccountConfig; // Cast to ensure compatibility
+
+          // Add default fields based on type if missing
+          if (oauthConfig.authType === 'oauth2') {
+             // OAuth usually just needs the redirect helper, fields are hidden or managed by triggers
+          } else if (oauthConfig.authType === 'api_key') {
+             // Ensure api_key field exists
+             if (!updatedAccount.fields.some(f => f.field === 'api_key')) {
+                 updatedAccount.fields.push({ 
+                     field: 'api_key', 
+                     label: 'API Key', 
+                     type: 'text', 
+                     required: true, 
+                     encrypted: true 
+                 });
+             }
+          }
+
+          onChange({ ...config, accounts: newAccounts });
+      }
+      setIsOAuthWizardOpen(false);
+      setActiveAccountIndex(null);
+  };
 
   // Handle template selection
   const handleTemplateSelect = useCallback((template: Template) => {
@@ -455,6 +508,14 @@ export function ComponentsStep({ config, onChange }: ComponentsStepProps) {
                         </ControlGroup>
                       </div>
                     )}
+                    
+                    <div style={{ marginTop: 16 }}>
+                        <Button 
+                            appearance="secondary" 
+                            label="🪄 Open Auth Wizard" 
+                            onClick={() => openOAuthWizard(index)} 
+                        />
+                    </div>
                   </div>
                 </CollapsiblePanel>
               </ComponentItem>
@@ -766,6 +827,24 @@ export function ComponentsStep({ config, onChange }: ComponentsStepProps) {
           </div>
         </TabLayout.Panel>
       </TabLayout>
+      
+      {isOAuthWizardOpen && (
+        <OAuthWizard 
+            open={isOAuthWizardOpen} 
+            onClose={() => setIsOAuthWizardOpen(false)} 
+            onSave={handleOAuthSave}
+            initialConfig={activeAccountIndex !== null && config.accounts[activeAccountIndex] ? {
+                authType: config.accounts[activeAccountIndex].authType === 'oauth' ? 'oauth2' : config.accounts[activeAccountIndex].authType === 'apikey' ? 'api_key' : 'basic',
+                label: config.accounts[activeAccountIndex].name,
+                clientId: config.accounts[activeAccountIndex].oauth?.clientId ? String(config.accounts[activeAccountIndex].oauth?.clientId) : undefined,
+                clientSecret: config.accounts[activeAccountIndex].oauth?.clientSecret ? String(config.accounts[activeAccountIndex].oauth?.clientSecret) : undefined,
+                authUrl: config.accounts[activeAccountIndex].oauth?.authUrl,
+                tokenUrl: config.accounts[activeAccountIndex].oauth?.tokenUrl,
+                redirectUri: config.accounts[activeAccountIndex].oauth?.redirectUri,
+                scopes: config.accounts[activeAccountIndex].oauth?.scope ? [config.accounts[activeAccountIndex].oauth?.scope] : undefined 
+            } : undefined}
+        />
+      )}
     </div>
   );
 }

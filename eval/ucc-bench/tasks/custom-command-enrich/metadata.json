@@ -1,0 +1,5 @@
+{
+  "difficulty": "medium",
+  "tags": ["custom-command", "searchcommands", "splunklib"],
+  "description": "Implement a streaming custom command with commands.conf wiring and robust event enrichment logic."
+}

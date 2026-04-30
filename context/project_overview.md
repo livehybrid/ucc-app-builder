@@ -1,0 +1,27 @@
+# Project Overview
+
+## Vision
+The Splunk App Builder is a modern, high-fidelity IDE and wizard experience for building Splunk Add-ons using the **UCC (Universal Configuration Console)** framework. It aims to replace the legacy Splunk Add-on Builder with a CI/CD-friendly, web-native, and extensible tool.
+
+## Core Value Proposition
+- **CI/CD Friendly**: Prioritizes source-only exports for version control.
+- **Web-Native**: Runs in the browser with a virtual file system (VFS).
+- **Extensible**: Supports rich validation and IntelliSense for Splunk `.conf` files.
+
+## Architecture
+- **Frontend**: Vite + React + TypeScript.
+- **VFS**: A recursive tree structure (Map-based) representing files and directories in memory.
+- **IDE**: Monaco Editor with custom language registration (`splunk-conf`) and JSON schema validation.
+- **Backend**: Node.js Express server that orchestrates `ucc-gen` (Python CLI) for actual app compilation.
+
+## Key Modules
+- `src/lib/vfs.ts`: The heart of file management.
+- `src/lib/specParser.ts`: Ingests Splunk `.spec` files to provide real-time validation.
+- `src/lib/generator.ts`: Logic for creating the initial UCC project structure.
+- `server/services/uccGen.ts`: Handles communication with the Python environment.
+
+## Roadmap
+1. **AI Integration**: Chat drawer and contextual code generation (OpenRouter).
+2. **OAuth 2.0**: Specialized wizards for complex authentication flows.
+3. **Validation Polish**: Further refining the SpecParser to handle all edge cases in Splunk's schema.
+4. **DevOps**: Dockerization and NPM package packaging.

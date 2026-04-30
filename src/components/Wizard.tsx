@@ -224,6 +224,14 @@ export function Wizard({ state, onChange, onGenerate }: WizardProps) {
               />
             </ControlGroup>
 
+            <ControlGroup label="Author Email" labelPosition="top" help="Required for UCC build.">
+              <Text
+                value={state.metadata.email}
+                onChange={(_e: unknown, { value }: { value: string }) => updateMetadata('email', value)}
+                placeholder="author@example.com"
+              />
+            </ControlGroup>
+
             <ControlGroup label="Version" labelPosition="top" help="Required. Semantic version number." error={touched.version && getFieldError('version', state.metadata.version, true)}>
               <Text
                 value={state.metadata.version}
@@ -241,6 +249,22 @@ export function Wizard({ state, onChange, onGenerate }: WizardProps) {
                 onBlur={() => markTouched('appId')}
                 error={!!getFieldError('appId', state.metadata.appId)}
                 placeholder="my_splunk_app (auto-generated if empty)"
+              />
+            </ControlGroup>
+
+            <ControlGroup label="License Name" labelPosition="top" help="Required for UCC build (e.g. Apache-2.0, MIT, Proprietary).">
+              <Text
+                value={state.metadata.licenseName}
+                onChange={(_e: unknown, { value }: { value: string }) => updateMetadata('licenseName', value)}
+                placeholder="Apache-2.0"
+              />
+            </ControlGroup>
+
+            <ControlGroup label="License URI" labelPosition="top" help="Required for UCC build.">
+              <Text
+                value={state.metadata.licenseUri}
+                onChange={(_e: unknown, { value }: { value: string }) => updateMetadata('licenseUri', value)}
+                placeholder="https://www.apache.org/licenses/LICENSE-2.0"
               />
             </ControlGroup>
           </div>

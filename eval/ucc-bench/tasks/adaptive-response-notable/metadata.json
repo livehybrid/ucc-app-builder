@@ -1,0 +1,5 @@
+{
+  "difficulty": "hard",
+  "tags": ["adaptive-response", "alert-action", "soc"],
+  "description": "Create a configurable alert action that maps notable events into incident payloads with threshold logic."
+}

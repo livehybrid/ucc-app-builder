@@ -10,8 +10,11 @@ export interface AppMetadata {
   displayName: string;
   description: string;
   author: string;
+  email: string;
   version: string;
   appId: string;
+  licenseName: string;
+  licenseUri: string;
 }
 
 export interface BrandingConfig {
@@ -40,8 +43,11 @@ export const DEFAULT_WIZARD_STATE: WizardState = {
     displayName: '',
     description: '',
     author: '',
+    email: '',
     version: '1.0.0',
     appId: '',
+    licenseName: 'Apache-2.0',
+    licenseUri: 'https://www.apache.org/licenses/LICENSE-2.0',
   },
   branding: {
     logoFile: null,

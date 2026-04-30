@@ -1,6 +1,8 @@
 import { useState, useRef, useCallback, useEffect } from 'react';
 import { DiffEditor } from '@monaco-editor/react';
-import { TOOLS } from '../lib/ai/tools';
+import { toolRegistry } from '../lib/ai/tools';
+import { parseStream } from '../lib/ai/streamParser';
+import { fetchWithRetry } from '../lib/ai/retry';
 import type { VirtualFileSystem } from '../lib/vfs';
 import styled from 'styled-components';
 import SidePanel from '@splunk/react-ui/SidePanel';
@@ -29,6 +31,7 @@ interface AIChatPanelProps {
     errors?: string[];
     appName?: string; // The Splunk app name/ID (e.g., 'myapp1')
   };
+  onBuildTrigger?: () => Promise<void> | void;
 }
 
 interface ChatMessage {
@@ -38,6 +41,19 @@ interface ChatMessage {
   tool_calls?: { id: string; type: string; function: { name: string; arguments: string } }[];
   tool_call_id?: string;
   name?: string;
+}
+
+interface AgentTodo {
+  id: string;
+  content: string;
+  status: 'pending' | 'in_progress' | 'completed' | 'cancelled';
+}
+
+interface AgentDecision {
+  id: string;
+  question: string;
+  decision: string;
+  rationale?: string;
 }
 
 const PanelInner = styled.div<{ $width: number }>`
@@ -207,10 +223,11 @@ const MODEL_STORAGE = 'splunk-app-builder-ai-model';
 const AUTOACCEPT_STORAGE = 'splunk-app-builder-ai-autoaccept';
 const CHAT_HISTORY_STORAGE = 'splunk-app-builder-chat-history';
 const PANEL_WIDTH_STORAGE = 'splunk-app-builder-panel-width';
+const AGENT_SESSION_KEY = 'ucc-agent-session-id';
 
 // Popular coding-capable models with tool support
 const AVAILABLE_MODELS = [
-  { id: 'moonshotai/kimi-k2.5', label: 'Kimi K2.5 (Recommended)', provider: 'Moonshot' },
+  { id: 'moonshotai/kimi-k2', label: 'Kimi K2.6 (Recommended)', provider: 'Moonshot' },
   { id: 'anthropic/claude-sonnet-4', label: 'Claude Sonnet 4', provider: 'Anthropic' },
   { id: 'anthropic/claude-3.5-sonnet', label: 'Claude 3.5 Sonnet', provider: 'Anthropic' },
   { id: 'openai/gpt-4o', label: 'GPT-4o', provider: 'OpenAI' },
@@ -224,6 +241,18 @@ const AVAILABLE_MODELS = [
 interface AIConfig {
   serverManaged: boolean;
   defaultModel: string;
+  profile?: string;
+  models?: {
+    planner?: string;
+    executor?: string;
+    verifier?: string;
+  };
+  notes?: string[];
+  capabilities?: {
+    dockerToolsEnabled?: boolean;
+    browserCheckEnabled?: boolean;
+    localDocsIndexEnabled?: boolean;
+  };
 }
 
 // Pending tool approval state type
@@ -234,9 +263,9 @@ interface PendingApproval {
   existingContent?: string;
 }
 
-export function AIChatPanel({ open, onRequestClose, context, vfs, onVfsChange }: AIChatPanelProps) {
+export function AIChatPanel({ open, onRequestClose, context, vfs, onVfsChange, onBuildTrigger }: AIChatPanelProps) {
   const [apiKey, setApiKey] = useState(() => sessionStorage.getItem(API_KEY_STORAGE) || '');
-  const [selectedModel, setSelectedModel] = useState(() => localStorage.getItem(MODEL_STORAGE) || 'moonshotai/kimi-k2.5');
+  const [selectedModel, setSelectedModel] = useState(() => localStorage.getItem(MODEL_STORAGE) || 'moonshotai/kimi-k2');
   const [aiConfig, setAiConfig] = useState<AIConfig | null>(null);
 
   // Detect server-managed AI mode on mount
@@ -251,7 +280,7 @@ export function AIChatPanel({ open, onRequestClose, context, vfs, onVfsChange }:
       })
       .catch(() => {
         // Server not available, fall back to client mode
-        setAiConfig({ serverManaged: false, defaultModel: 'moonshotai/kimi-k2.5' });
+        setAiConfig({ serverManaged: false, defaultModel: 'moonshotai/kimi-k2' });
       });
   }, []);
   const [useCustomModel, setUseCustomModel] = useState(false);
@@ -300,6 +329,9 @@ export function AIChatPanel({ open, onRequestClose, context, vfs, onVfsChange }:
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
+  const [planText, setPlanText] = useState('');
+  const [todos, setTodos] = useState<AgentTodo[]>([]);
+  const [decisions, setDecisions] = useState<AgentDecision[]>([]);
   
   // Auto-accept toggle (persisted to localStorage)
   const [autoAccept, setAutoAccept] = useState(() => localStorage.getItem(AUTOACCEPT_STORAGE) === 'true');
@@ -357,6 +389,15 @@ export function AIChatPanel({ open, onRequestClose, context, vfs, onVfsChange }:
     localStorage.setItem(AUTOACCEPT_STORAGE, enabled ? 'true' : 'false');
   };
 
+  const getSessionId = (): string => {
+    let id = window.localStorage.getItem(AGENT_SESSION_KEY);
+    if (!id) {
+      id = `sess_${Math.random().toString(36).slice(2, 10)}_${Date.now().toString(36)}`;
+      window.localStorage.setItem(AGENT_SESSION_KEY, id);
+    }
+    return id;
+  };
+
   // Resize handlers for draggable panel width
   const startResize = useCallback((e: React.MouseEvent) => {
     e.preventDefault();
@@ -383,6 +424,9 @@ export function AIChatPanel({ open, onRequestClose, context, vfs, onVfsChange }:
   const clearChat = () => {
     setMessages([]);
     setError(null);
+    setPlanText('');
+    setTodos([]);
+    setDecisions([]);
     localStorage.removeItem(CHAT_HISTORY_STORAGE);
   };
 
@@ -507,6 +551,13 @@ You are a specialized AI assistant for building Splunk apps using the UCC framew
 - Use the generate_input_script tool for creating Python inputs
 - Use the add_config_entity tool for creating globalConfig entities
 - Use the get_splunklib_help tool to explain concepts with code examples
+- Use the get_splunk_sdk_reference tool before writing Python code that uses Splunk SDK/UCC helper APIs
+- Use the validate_ucc_conformance tool before finalizing major file edits to check UCC alignment
+- Use the build_app tool to build the app
+- Typically a user is starting out with a boilerplate app
+- Determine the globalConfig.json to determine if there is an existing reusable component, check if the user wants you to use a specific existing input from globalConfig.json or create a new input.
+- The user has no access to the ucc-gen command so cannot run \`ucc-gen build\`. Instead, the user can click the green "Build App" button to build the app or the 'build_app' tool. This will create a build which they can then download. 
+
 
 ## Python Modular Input Knowledge (splunklib)
 
@@ -545,7 +596,23 @@ def stream_events(helper, inputs, ew):
     response = helper.send_http_request(url=api_url, method="GET")
     event = helper.new_event(data=json.dumps(data), sourcetype="my_type")
     ew.write_event(event)
-\`\`\``;
+\`\`\`
+
+### Python Libraries
+- Third-party libraries should be listed in \`package/lib/requirements.txt\`.
+- Do NOT use \`pip install\`.
+- Instruct the user to add libraries to this file, then the build process will handle them (in a real UCC environment).
+- For this builder, just ensure they are listed for documentation.
+
+### Custom Commands
+- Custom search commands should go in \`package/bin/\`.
+- They must have a corresponding \`commands.conf\` entry.
+- Use the SDK's \`dispatch\` or \`SearchCommand\` classes.
+- If the user asks for a search command, check if one exists in \`globalConfig.json\` or the file tree first.
+
+### Building UCC APP
+The user has no access to the ucc-gen command so cannot run \`ucc-gen build\`. Instead, the user can click the green "Build App" button to build the app. This will create a build which they can then download. 
+`;
 
     // Add current context
     if (context?.appName) {
@@ -595,7 +662,7 @@ def stream_events(helper, inputs, ew):
         }
 
         system += summary;
-        system += `\n**INSTRUCTION:** Before creating a new input or alert, CHECK the list above. If a similar component exists, ask the user if they want to modify it instead of creating a duplicate.`;
+        system += `\n**CRITICAL INSTRUCTION:**\nBefore suggesting NEW inputs or alerts, you MUST check the list above.\n- If a similar component exists, ASK the user: "I see an existing input '${config.pages.inputs.services[0]?.name}'. Should I use that one or create a new one?"\n- DO NOT blindly create new inputs if one might already exist.\n- If you create a new input, use a unique name that doesn't conflict.`;
       } catch (e) {
         // Fallback if parse fails
       }
@@ -606,12 +673,242 @@ def stream_events(helper, inputs, ew):
       system += `\n\nCurrent errors:\n${context.errors.join('\n')}`;
     }
 
+    if (aiConfig?.capabilities) {
+      const dockerEnabled = Boolean(aiConfig.capabilities.dockerToolsEnabled);
+      const browserEnabled = Boolean(aiConfig.capabilities.browserCheckEnabled);
+      const docsEnabled = Boolean(aiConfig.capabilities.localDocsIndexEnabled);
+      system += `\n\n## Tool Capability Flags`;
+      system += `\n- Docker install tooling: ${dockerEnabled ? 'ENABLED' : 'DISABLED'}`;
+      system += `\n- Browser-check tooling: ${browserEnabled ? 'ENABLED' : 'DISABLED'}`;
+      system += `\n- Local docs index: ${docsEnabled ? 'ENABLED' : 'DISABLED'}`;
+      if (!dockerEnabled) {
+        system += `\n- Do NOT call install_to_splunk_docker when disabled.`;
+      }
+      if (!browserEnabled) {
+        system += `\n- Do NOT call browser_check when disabled.`;
+      }
+      if (!docsEnabled) {
+        system += `\n- consult_documentation may rely on external context service only.`;
+      }
+    }
+
     const files = vfs.listAllFiles().map(f => f.path);
     if (files.length > 0) {
       system += `\n\n## Project Files (use these EXACT paths)\n${files.join('\n')}`;
     }
 
     return system;
+  };
+
+  const applyServerFiles = (files: Array<{ path: string; content: string }>) => {
+    const snapshot = {
+      files: files.map((f) => ({
+        path: f.path,
+        content: f.content,
+        source: 'user' as const,
+      })),
+    };
+    vfs.fromSnapshot(snapshot);
+    onVfsChange?.();
+  };
+
+  const applyTodoPayload = (payload: unknown) => {
+    if (!Array.isArray(payload)) return;
+    const items: AgentTodo[] = payload
+      .map((item) => ({
+        id: String((item as Record<string, unknown>).id || ''),
+        content: String((item as Record<string, unknown>).content || ''),
+        status: String((item as Record<string, unknown>).status || 'pending') as AgentTodo['status'],
+      }))
+      .filter((item) => item.id && item.content);
+    if (items.length) setTodos(items);
+  };
+
+  const applyDecisionPayload = (payload: unknown) => {
+    if (!Array.isArray(payload)) return;
+    const items: AgentDecision[] = payload
+      .map((item) => ({
+        id: String((item as Record<string, unknown>).id || ''),
+        question: String((item as Record<string, unknown>).question || ''),
+        decision: String((item as Record<string, unknown>).decision || ''),
+        rationale: String((item as Record<string, unknown>).rationale || ''),
+      }))
+      .filter((item) => item.id && item.question && item.decision);
+    if (items.length) setDecisions(items);
+  };
+
+  const streamServerAgentLoop = async (
+    payload: {
+      sessionId: string;
+      model: string;
+      system: string;
+      messages: Array<{ role: string; content: string; tool_calls?: unknown[]; tool_call_id?: string; name?: string }>;
+      files: Array<{ path: string; content: string }>;
+    },
+  ) => {
+    const response = await fetch('/api/ai/agent/stream', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+    });
+    if (!response.ok) {
+      throw new Error(`Agent stream error: ${response.status}`);
+    }
+    if (!response.body) {
+      throw new Error('Agent stream missing response body.');
+    }
+
+    let assistantContent = '';
+    let hasAssistantMessage = false;
+    let eventName = 'message';
+    const pendingData: string[] = [];
+    const decoder = new TextDecoder();
+    const reader = response.body.getReader();
+    let buffer = '';
+
+    const dispatchEvent = (name: string, dataText: string) => {
+      let parsed: Record<string, unknown> = {};
+      if (dataText) {
+        try {
+          parsed = JSON.parse(dataText);
+        } catch {
+          parsed = { raw: dataText };
+        }
+      }
+
+      if (name === 'planner' && parsed.content) {
+        setPlanText(String(parsed.content));
+        setMessages((prev) => [
+          ...prev,
+          {
+            role: 'system',
+            content: `Plan:\n${String(parsed.content)}`,
+            timestamp: new Date(),
+          },
+        ]);
+        return;
+      }
+
+      if (name === 'tool_call') {
+        const toolName = String(parsed.name || '');
+        let parsedArgs: unknown = undefined;
+        try {
+          parsedArgs = JSON.parse(String(parsed.arguments || '{}'));
+        } catch {
+          parsedArgs = undefined;
+        }
+        if (toolName === 'todo_write' && parsedArgs && (parsedArgs as Record<string, unknown>).todos) {
+          applyTodoPayload((parsedArgs as Record<string, unknown>).todos);
+        }
+        if (toolName === 'record_decision' && parsedArgs) {
+          const d = parsedArgs as Record<string, unknown>;
+          if (d.id && d.question && d.decision) {
+            setDecisions((prev) => {
+              const next = prev.filter((x) => x.id !== String(d.id));
+              next.push({
+                id: String(d.id),
+                question: String(d.question),
+                decision: String(d.decision),
+                rationale: String(d.rationale || ''),
+              });
+              return next;
+            });
+          }
+        }
+        return;
+      }
+
+      if (name === 'assistant_delta' && parsed.content) {
+        assistantContent += String(parsed.content);
+        setMessages((prev) => {
+          if (!hasAssistantMessage) {
+            hasAssistantMessage = true;
+            return [...prev, { role: 'assistant', content: assistantContent, timestamp: new Date() }];
+          }
+          const last = prev[prev.length - 1];
+          if (last?.role === 'assistant') {
+            return [...prev.slice(0, -1), { ...last, content: assistantContent }];
+          }
+          return [...prev, { role: 'assistant', content: assistantContent, timestamp: new Date() }];
+        });
+        return;
+      }
+
+      if (name === 'tool_result') {
+        setMessages((prev) => [
+          ...prev,
+          {
+            role: 'tool',
+            content: String(parsed.content || ''),
+            name: String(parsed.name || ''),
+            tool_call_id: String(parsed.id || ''),
+            timestamp: new Date(),
+          },
+        ]);
+        return;
+      }
+
+      if (name === 'warning' && parsed.message) {
+        setMessages((prev) => [
+          ...prev,
+          { role: 'system', content: String(parsed.message), timestamp: new Date() },
+        ]);
+        return;
+      }
+
+      if (name === 'files' && Array.isArray(parsed.files)) {
+        applyServerFiles(parsed.files as Array<{ path: string; content: string }>);
+        return;
+      }
+
+      if (name === 'todos' && Array.isArray(parsed.items)) {
+        applyTodoPayload(parsed.items);
+        return;
+      }
+
+      if (name === 'decisions' && Array.isArray(parsed.items)) {
+        applyDecisionPayload(parsed.items);
+        return;
+      }
+
+      if (name === 'error' && parsed.error) {
+        throw new Error(String(parsed.error));
+      }
+    };
+
+    const flushEvent = () => {
+      const data = pendingData.join('\n');
+      dispatchEvent(eventName, data);
+      eventName = 'message';
+      pendingData.length = 0;
+    };
+
+    let streamComplete = false;
+    while (!streamComplete) {
+      const { done, value } = await reader.read();
+      if (done) {
+        streamComplete = true;
+        continue;
+      }
+      buffer += decoder.decode(value, { stream: true });
+      const lines = buffer.split('\n');
+      buffer = lines.pop() || '';
+
+      for (const rawLine of lines) {
+        const line = rawLine.replace(/\r$/, '');
+        if (!line) {
+          flushEvent();
+          continue;
+        }
+        if (line.startsWith('event:')) {
+          eventName = line.slice(6).trim();
+        } else if (line.startsWith('data:')) {
+          pendingData.push(line.slice(5).trim());
+        }
+      }
+    }
+
+    if (pendingData.length > 0) flushEvent();
   };
 
   const sendMessage = async () => {
@@ -638,9 +935,23 @@ def stream_events(helper, inputs, ew):
     setError(null);
 
     // Initial system message
+    const systemContent = buildSystemMessage();
+    
+    // Use a truncated version of messages to avoid context overflow if needed
+    // Simple heuristic: keep system + last 10 messages
+    const contextMessages = newMessages.length > 20 
+      ? newMessages.slice(-20) 
+      : newMessages;
+      
+    // Summarize older messages if we dropped any
+    let systemPrefix = "";
+    if (newMessages.length > 20) {
+       systemPrefix = "User: [Prior conversation summarized] We are continuing a previous discussion.\n";
+    }
+
     const apiMessages = [
-      { role: 'system', content: buildSystemMessage() },
-      ...newMessages.map((m) => {
+      { role: 'system', content: systemPrefix + systemContent },
+      ...contextMessages.map((m) => {
         const msg: { role: string; content: string; tool_calls?: unknown[]; tool_call_id?: string; name?: string } = { role: m.role, content: m.content };
         if (m.tool_calls) msg.tool_calls = m.tool_calls;
         if (m.tool_call_id) msg.tool_call_id = m.tool_call_id;
@@ -650,6 +961,34 @@ def stream_events(helper, inputs, ew):
     ];
 
     try {
+      if (isServerManaged) {
+        const systemContent = buildSystemMessage();
+        const contextMessages = newMessages.length > 20 ? newMessages.slice(-20) : newMessages;
+        let systemPrefix = '';
+        if (newMessages.length > 20) {
+          systemPrefix = 'User: [Prior conversation summarized] We are continuing a previous discussion.\n';
+        }
+        const apiMessages = contextMessages.map((m) => {
+          const msg: { role: string; content: string; tool_calls?: unknown[]; tool_call_id?: string; name?: string } = {
+            role: m.role,
+            content: m.content,
+          };
+          if (m.tool_calls) msg.tool_calls = m.tool_calls;
+          if (m.tool_call_id) msg.tool_call_id = m.tool_call_id;
+          if (m.name) msg.name = m.name;
+          return msg;
+        });
+
+        await streamServerAgentLoop({
+          sessionId: getSessionId(),
+          model: activeModel,
+          system: systemPrefix + systemContent,
+          messages: apiMessages,
+          files: vfs.getAllFiles(),
+        });
+        return;
+      }
+
       let keepGoing = true;
       let iterations = 0;
       
@@ -659,126 +998,192 @@ def stream_events(helper, inputs, ew):
         const requestBody = JSON.stringify({
           model: activeModel,
           messages: apiMessages,
+          stream: true, 
           max_tokens: 4096,
-          tools: TOOLS.map(t => ({
-            type: 'function',
-            function: {
-              name: t.name,
-              description: t.description,
-              parameters: t.parameters
-            }
-          }))
+          tools: toolRegistry.toOpenAIFormat()
         });
 
-        const response = isServerManaged
-          ? await fetch('/api/ai/chat', {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: requestBody,
-            })
-          : await fetch('https://openrouter.ai/api/v1/chat/completions', {
-              method: 'POST',
-              headers: {
-                'Content-Type': 'application/json',
-                Authorization: `Bearer ${apiKey}`,
-                'HTTP-Referer': 'https://splunk.engineer',
-                'X-Title': 'UCCBuilder',
-              },
-              body: requestBody,
-            });
-
-        if (!response.ok) {
-          const errData = await response.json().catch(() => ({}));
-          throw new Error(errData.error?.message || `API error: ${response.status}`);
+        const url = isServerManaged ? '/api/ai/chat' : 'https://openrouter.ai/api/v1/chat/completions';
+        const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+        
+        if (!isServerManaged) {
+           headers['Authorization'] = `Bearer ${apiKey}`;
+           headers['HTTP-Referer'] = 'https://splunk.engineer';
+           headers['X-Title'] = 'UCCBuilder';
         }
 
-        const data = await response.json();
-        const choice = data.choices?.[0];
-        const message = choice?.message;
-        
-        if (!message) throw new Error('No response from API');
+        const response = await fetchWithRetry(url, {
+             method: 'POST',
+             headers,
+             body: requestBody
+        });
 
-        // Append assistant message
+        if (!response.ok) {
+           throw new Error(`API error: ${response.status}`);
+        }
+
+        let fullContent = '';
+        const toolCalls: Record<number, { id: string; function: { name: string; arguments: string } }> = {};
+        
+        // Temporary assistant message for streaming
+        setMessages(prev => [...prev, {
+            role: 'assistant',
+            content: '',
+            timestamp: new Date()
+        }]);
+
+        for await (const event of parseStream(response)) {
+            if (event.type === 'content') {
+                fullContent += event.content;
+                setMessages(prev => {
+                    const last = prev[prev.length - 1];
+                    if (last.role === 'assistant' && !last.tool_calls) {
+                        return [...prev.slice(0, -1), { ...last, content: fullContent }];
+                    }
+                    return prev;
+                });
+            } else if (event.type === 'tool_call') {
+                const tc = event.toolCall;
+                const idx = event.index;
+                
+                if (!toolCalls[idx]) {
+                    toolCalls[idx] = { 
+                        id: tc.id || '', 
+                        function: { name: '', arguments: '' } 
+                    };
+                }
+                
+                if (tc.function?.name) toolCalls[idx].function.name += tc.function.name;
+                if (tc.function?.arguments) toolCalls[idx].function.arguments += tc.function.arguments;
+            } else if (event.type === 'error') {
+                throw new Error(event.error);
+            }
+        }
+
+        const finalToolCalls = Object.values(toolCalls).map(tc => ({
+            id: tc.id,
+            type: 'function',
+            function: {
+                name: tc.function.name,
+                arguments: tc.function.arguments
+            }
+        }));
+
         const assistantMsg: ChatMessage = {
           role: 'assistant',
-          content: message.content || '',
+          content: fullContent,
           timestamp: new Date(),
-          tool_calls: message.tool_calls,
+          tool_calls: finalToolCalls.length > 0 ? finalToolCalls : undefined
         };
         
-        setMessages(prev => [...prev, assistantMsg]);
-        apiMessages.push(message);
-
-        // Check for tool calls
-        if (message.tool_calls && message.tool_calls.length > 0) {
+        apiMessages.push(assistantMsg);
+        
+        if (finalToolCalls.length > 0) {
           keepGoing = true;
           
-          for (const toolCall of message.tool_calls) {
+          for (const toolCall of finalToolCalls) {
             const toolName = toolCall.function.name;
+            const tool = toolRegistry.get(toolName);
+            
+            if (!tool) {
+                 apiMessages.push({
+                     role: 'tool',
+                     tool_call_id: toolCall.id,
+                     name: toolName,
+                     content: `Error: Tool ${toolName} not found`
+                 });
+                 continue;
+            }
+
             let toolArgs: Record<string, unknown> = {};
             try {
               toolArgs = JSON.parse(toolCall.function.arguments || '{}');
             } catch (parseErr) {
-              console.error('Failed to parse tool arguments:', toolCall.function.arguments);
-              // Continue with empty args
-            }
-            
-            // Find tool implementation
-            const tool = TOOLS.find(t => t.name === toolName);
-            let toolResult = '';
-            
-            if (tool) {
-              try {
-                if (toolName === 'write_file') {
-                   // Request approval for write operations
-                   const approved = await requestApproval(toolName, toolArgs);
-                   if (approved) {
-                      toolResult = await tool.execute(toolArgs, vfs);
-                      // Notify parent that VFS changed so Monaco can refresh
-                      onVfsChange?.();
-                   } else {
-                      toolResult = "User denied write permission.";
-                   }
-                } else {
-                   toolResult = await tool.execute(toolArgs, vfs);
-                }
-              } catch (e: unknown) {
-                toolResult = `Error executing tool: ${e instanceof Error ? e.message : String(e)}`;
-              }
-            } else {
-              toolResult = `Error: Tool ${toolName} not found`;
+                 apiMessages.push({
+                     role: 'tool',
+                     tool_call_id: toolCall.id,
+                     name: toolName,
+                     content: `Error parsing arguments: ${String(parseErr)}`
+                 });
+                 continue;
             }
 
-            // Build a descriptive tool message based on tool type
-            let toolDisplayContent = `✅ ${toolName}`;
-            if (toolName === 'write_file' && toolArgs.path) {
-              toolDisplayContent = `📝 Wrote: ${toolArgs.path}`;
-            } else if (toolName === 'read_file' && toolArgs.path) {
-              toolDisplayContent = `📖 Read: ${toolArgs.path}`;
-            } else if (toolName === 'list_files' && toolArgs.directory) {
-              toolDisplayContent = `📁 Listed: ${toolArgs.directory}`;
+            if (['write_file', 'build_app', 'run_ucc_gen', 'run_appinspect', 'install_to_splunk_docker', 'browser_check'].includes(toolName)) {
+                const approved = await requestApproval(toolName, toolArgs);
+                if (!approved) {
+                    apiMessages.push({
+                        role: 'tool',
+                        tool_call_id: toolCall.id,
+                        name: toolName,
+                        content: 'User denied permission to execute this tool.'
+                    });
+                    continue;
+                }
             }
             
-            // Append tool output message
-            const toolMsg = {
-              role: 'tool',
-              tool_call_id: toolCall.id,
-              name: toolName,
-              content: toolResult
-            };
-            
-            apiMessages.push(toolMsg);
-            setMessages(prev => [...prev, {
-               role: 'tool',
-               content: toolDisplayContent,
-               timestamp: new Date(),
-               tool_call_id: toolCall.id,
-               name: toolName
-            } as ChatMessage]);
+            try {
+                const result = await tool.execute(toolArgs, vfs, { onBuildTrigger });
+                if (toolName === 'todo_write' && Array.isArray(toolArgs.todos)) {
+                  applyTodoPayload(toolArgs.todos);
+                }
+                if (toolName === 'record_decision') {
+                  const d = toolArgs as Record<string, unknown>;
+                  if (d.id && d.question && d.decision) {
+                    setDecisions((prev) => {
+                      const next = prev.filter((x) => x.id !== String(d.id));
+                      next.push({
+                        id: String(d.id),
+                        question: String(d.question),
+                        decision: String(d.decision),
+                        rationale: String(d.rationale || ''),
+                      });
+                      return next;
+                    });
+                  }
+                }
+                 apiMessages.push({
+                     role: 'tool',
+                     tool_call_id: toolCall.id,
+                     name: toolName,
+                     content: result
+                 });
+                 
+                 // Update UI with tool result
+                 setMessages(prev => [...prev, {
+                    role: 'tool',
+                    tool_call_id: toolCall.id,
+                    name: toolName,
+                    content: result,
+                    timestamp: new Date()
+                 }]);
+            } catch (err: unknown) {
+                 const errorMsg = `Error executing tool: ${err instanceof Error ? err.message : String(err)}`;
+                 apiMessages.push({
+                     role: 'tool',
+                     tool_call_id: toolCall.id,
+                     name: toolName,
+                     content: errorMsg
+                 });
+                 setMessages(prev => [...prev, {
+                    role: 'tool',
+                    tool_call_id: toolCall.id,
+                    name: toolName,
+                    content: errorMsg,
+                    timestamp: new Date()
+                 }]);
+            }
           }
         } else {
-          keepGoing = false;
+            keepGoing = false;
         }
+      }
+      
+      if (iterations >= 15) {
+         setMessages(prev => [...prev, {
+             role: 'system',
+             content: '⚠️ Reached maximum tool iterations. Please continue or ask specifically.',
+             timestamp: new Date()
+         } as ChatMessage]);
       }
 
     } catch (err) {
@@ -871,6 +1276,16 @@ def stream_events(helper, inputs, ew):
             <Message type="info" style={{ marginTop: 12 }}>
               Active: {activeModel}
             </Message>
+            {aiConfig?.capabilities && (
+              <Message type="info" style={{ marginTop: 8 }}>
+                Docker tools: {aiConfig.capabilities.dockerToolsEnabled ? 'enabled' : 'disabled'} | Browser check: {aiConfig.capabilities.browserCheckEnabled ? 'enabled' : 'disabled'}
+              </Message>
+            )}
+            {aiConfig?.capabilities && (
+              <Message type="info" style={{ marginTop: 8 }}>
+                Local docs index: {aiConfig.capabilities.localDocsIndexEnabled ? 'enabled' : 'disabled'}
+              </Message>
+            )}
 
             <div style={{ marginTop: 16, paddingTop: 16, borderTop: '1px solid rgba(255,255,255,0.1)' }}>
               <Switch
@@ -888,6 +1303,40 @@ def stream_events(helper, inputs, ew):
         )}
 
         <PanelBody>
+          {(planText || todos.length > 0 || decisions.length > 0) && (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+              {planText && (
+                <Message type="info">
+                  <strong>Plan</strong>
+                  <div style={{ marginTop: 6, whiteSpace: 'pre-wrap' }}>{planText}</div>
+                </Message>
+              )}
+              {todos.length > 0 && (
+                <Message type="warning">
+                  <strong>Todo Tracker</strong>
+                  <div style={{ marginTop: 6 }}>
+                    {todos.map((t) => (
+                      <div key={t.id}>
+                        [{t.status}] {t.content}
+                      </div>
+                    ))}
+                  </div>
+                </Message>
+              )}
+              {decisions.length > 0 && (
+                <Message type="success">
+                  <strong>Decision Log</strong>
+                  <div style={{ marginTop: 6 }}>
+                    {decisions.slice(-5).map((d) => (
+                      <div key={d.id}>
+                        {d.question} {'->'} {d.decision}
+                      </div>
+                    ))}
+                  </div>
+                </Message>
+              )}
+            </div>
+          )}
           {messages.length === 0 ? (
             <EmptyState>
               <div style={{ fontSize: '2rem' }}>&#x1F916;</div>

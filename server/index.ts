@@ -1,7 +1,15 @@
 import express from 'express';
 import cors from 'cors';
+import path from 'path';
+import dotenv from 'dotenv';
 import { buildRouter } from './routes/build.js';
 import { aiRouter } from './routes/ai.js';
+import { agentRouter } from './routes/agent.js';
+import { confSpecRouter } from './routes/confspec.js';
+
+// Load .env from app root first, then workspace root (if present).
+dotenv.config({ path: path.resolve(process.cwd(), '.env') });
+dotenv.config({ path: path.resolve(process.cwd(), '..', '..', '.env') });
 
 const app = express();
 const PORT = process.env.PORT || 3001;
@@ -59,6 +67,8 @@ app.post('/api/github/login/oauth/access_token', async (req, res) => {
 // Routes
 app.use('/api', buildRouter);
 app.use('/api', aiRouter);
+app.use('/api', agentRouter);
+app.use('/api', confSpecRouter);
 
 
 

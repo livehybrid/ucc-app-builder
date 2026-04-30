@@ -329,7 +329,7 @@ export function createGlobalConfig(
   if (components.inputs.length > 0) {
     const inputServices: GlobalConfigService[] = components.inputs.map(input => ({
       name: input.name,
-      title: input.title,
+      title: input.title || input.name,
       entity: input.entity.map(entityFieldToGlobalConfig),
       inputHelperModule: `${input.name}_helper`,
     }));

@@ -1,0 +1,16 @@
+node_modules
+dist
+dist-server
+coverage
+.git
+.github
+.vscode
+.idea
+.DS_Store
+*.log
+*.tsbuildinfo
+.env
+.env.*
+data/
+memory/logs/
+.tmp/
