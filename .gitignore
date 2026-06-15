@@ -1,0 +1,46 @@
+# Dependencies
+node_modules/
+node_modules
+
+# Build output
+dist/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Testing
+coverage/
+
+# Environment
+.env
+.env.local
+.env.*.local
+
+# Logs
+*.log
+npm-debug.log*
+
+# OS
+.DS_Store
+Thumbs.db
+
+# TypeScript
+*.tsbuildinfo
+# Root config declaration artifacts emitted by `tsc -b`
+/vite.config.d.ts
+/vite.config.node.d.ts
+
+# Server build output
+dist-server/
+
+# ATLAS framework data (repo-root only — must NOT match the Splunk app's
+# default/data/ui views + nav, which are real source that ucc-gen does not generate).
+/data/
+memory/logs/
+.tmp/
+
+# Agent loop trace sink (JSONL)
+.ucc-agent/

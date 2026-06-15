@@ -1,0 +1,352 @@
+name: CI
+
+on:
+  push:
+    branches: [main, agentic-appinspect-loop, feat/splunk-app-mcp-tools, feat/splunk-native-ui]
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: read
+  pull-requests: write
+
+jobs:
+  # Fast, hermetic gate: typecheck, lint, unit tests, frontend + server build,
+  # and the MCP-server JSON-RPC smoke (no Splunk toolchain / no network).
+  build-test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          submodules: true
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v5
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Type check
+        run: npm run typecheck
+
+      - name: Lint
+        run: npm run lint
+
+      - name: Unit tests
+        run: npm run test:run
+
+      - name: Build frontend
+        run: npm run build
+
+      - name: Build server
+        run: npm run build:server
+
+      - name: MCP JSON-RPC smoke (init -> tools/list -> create_addon -> add_input -> list_project)
+        run: npm run mcp:smoke
+
+      - name: Upload build artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: dist
+          path: dist/
+          retention-days: 7
+
+  # The keystone: prove the agentic loop reaches AppInspect-CLEAN end-to-end on the
+  # real toolchain (ucc-gen + splunk-appinspect), deterministically and with NO LLM /
+  # network. Runs both a config-only add-on and the input-bearing add-on (the §1 fix).
+  loop-smoke:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          submodules: true
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v5
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.10'
+
+      - name: Install Splunk toolchain (ucc-gen + splunk-appinspect)
+        run: |
+          python -m pip install --upgrade pip
+          pip install "splunk-add-on-ucc-framework==6.4.0" "splunk-appinspect==4.2.1"
+
+      - name: Install Node dependencies
+        run: npm ci
+
+      - name: Loop smoke — config-only add-on reaches CLEAN (deterministic, --no-llm)
+        run: npm run loop:smoke
+
+      - name: Loop smoke — input-bearing add-on reaches CLEAN (the §1 fix, --no-llm)
+        run: npm run loop -- --no-llm fixtures/input-addon.project.json
+
+      - name: UCC-bench — validate the 5 task definitions (dry-run, no API/cost)
+        run: npx tsx eval/ucc-bench/runner.ts --dry-run
+
+  # Build the NATIVE Splunk app (splunk-app/) the way the other hackathon apps do:
+  # ucc-gen build + vendored Splunk Agent SDK stack (deploy/build_agent_app.sh), then
+  # AppInspect precert on the resulting tarball. Gate: zero errors and zero failures
+  # EXCEPT check_aarch64_compatibility — which is inherent to shipping x86_64 wheels for
+  # the Agent SDK's compiled deps (pydantic_core, cffi, …); the app targets x86_64 Splunk.
+  splunk-app:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          submodules: true
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install UCC + AppInspect
+        run: pip install "splunk-add-on-ucc-framework>=6.5.0" "splunk-appinspect>=4.2.1"
+
+      - name: Build the native Splunk app (ucc-gen + Agent SDK deps)
+        run: bash splunk-app/deploy/build_agent_app.sh "$RUNNER_TEMP/uccbuild"
+
+      - name: Package tarball
+        run: tar czf "$RUNNER_TEMP/ucc_app_builder.tar.gz" -C "$RUNNER_TEMP/uccbuild" ucc_app_builder
+
+      - name: AppInspect precert on the built tarball
+        run: |
+          splunk-appinspect inspect "$RUNNER_TEMP/ucc_app_builder.tar.gz" \
+            --mode precert --data-format json \
+            --output-file "$RUNNER_TEMP/appinspect.json" \
+            --max-messages all --skip-trusted-libraries-update || true
+          python - "$RUNNER_TEMP/appinspect.json" <<'PY'
+          import json, sys
+          # Inherent to vendoring the Splunk Agent SDK (compiled x86_64 wheels). The app
+          # targets x86_64 Splunk; revisit if multi-arch wheels are bundled.
+          ALLOW = {"check_aarch64_compatibility"}
+          d = json.load(open(sys.argv[1]))
+          print("AppInspect summary:", json.dumps(d.get("summary", {})))
+          bad = []
+          for rep in d.get("reports", []):
+              for g in rep.get("groups", []):
+                  for c in g.get("checks", []):
+                      if c.get("result") == "error" or (
+                          c.get("result") == "failure" and c["name"] not in ALLOW):
+                          bad.append((c["result"], c["name"]))
+          if bad:
+              print("Blocking checks (not allow-listed):", bad)
+              sys.exit(1)
+          print("AppInspect OK — 0 errors, 0 non-allow-listed failures.")
+          PY
+
+      - name: Upload app package
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: ucc_app_builder-splunk-app
+          path: ${{ runner.temp }}/ucc_app_builder.tar.gz
+          if-no-files-found: ignore
+          retention-days: 7
+
+  # Official Splunk AppInspect certification using Splunk's OWN GitHub Action
+  # (splunk/appinspect-cli-action) — the same action the shared
+  # livehybrid/deploy-splunk-app-action pipeline wraps for every other livehybrid
+  # Splunk app. Runs the `cloud` certification tag group on the built tarball: a
+  # clean 0-failure pass (the compiled-deps check_aarch64_compatibility is not in
+  # `cloud`; it's allow-listed in the strict precert gate above and recorded in
+  # .appinspect.expect.yaml). Pinned to @v2.13.0 — v2.11.0's reporter KeyErrors on
+  # apps with zero manual checks (this app is that clean); v2.13.0 fixed it.
+  official-appinspect-cloud:
+    name: official-appinspect-cloud
+    needs: splunk-app
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - name: Download built tarball
+        uses: actions/download-artifact@v4
+        with:
+          name: ucc_app_builder-splunk-app
+          path: scan
+      - name: Splunk AppInspect (official action, cloud cert)
+        uses: splunk/appinspect-cli-action@v2.13.0
+        with:
+          app_path: scan/
+          included_tags: cloud
+          appinspect_expected_failures: .appinspect.expect.yaml
+
+  # LIVE integration: install the built app into a real Splunk (Docker) and run the
+  # smoke test that drives the MCP tool REST handlers + AI-config endpoints end-to-end
+  # through splunkd — proving the in-Splunk path works, in a clean isolated environment.
+  splunk-integration:
+    runs-on: ubuntu-latest
+    env:
+      SPLUNK_PASSWORD: Chang3d-Integr8-Pw
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          submodules: true
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install UCC framework
+        run: pip install "splunk-add-on-ucc-framework>=6.5.0"
+
+      - name: Build the native Splunk app
+        run: bash splunk-app/deploy/build_agent_app.sh "$RUNNER_TEMP/uccbuild"
+
+      - name: Package tarball
+        run: tar czf "$RUNNER_TEMP/ucc_app_builder.tar.gz" -C "$RUNNER_TEMP/uccbuild" ucc_app_builder
+
+      - name: Start Splunk (Docker)
+        run: |
+          docker run -d --name splunk \
+            -p 8089:8089 \
+            -e SPLUNK_GENERAL_TERMS=--accept-sgt-current-at-splunk-com \
+            -e SPLUNK_START_ARGS=--accept-license \
+            -e SPLUNK_PASSWORD="$SPLUNK_PASSWORD" \
+            splunk/splunk:latest
+          echo "Waiting for splunkd to become healthy…"
+          for i in $(seq 1 60); do
+            code=$(curl -k -s -o /dev/null -w "%{http_code}" -u "admin:$SPLUNK_PASSWORD" \
+              https://localhost:8089/services/server/info 2>/dev/null || true)
+            echo "  [$((i*10))s] server/info -> $code"
+            [ "$code" = "200" ] && { echo "splunkd up"; break; }
+            sleep 10
+          done
+          [ "$(curl -k -s -o /dev/null -w '%{http_code}' -u "admin:$SPLUNK_PASSWORD" https://localhost:8089/services/server/info)" = "200" ]
+
+      - name: Install the app + restart
+        run: |
+          docker cp "$RUNNER_TEMP/ucc_app_builder.tar.gz" splunk:/tmp/app.tgz
+          # REST install: splunkd installs the app as itself (avoids docker-exec uid issues).
+          curl -k -s --fail -u "admin:$SPLUNK_PASSWORD" \
+            https://localhost:8089/services/apps/local \
+            -d name=/tmp/app.tgz -d filename=true -d output_mode=json | head -c 300
+          echo
+          docker restart splunk
+          echo "Waiting for splunkd after restart…"
+          for i in $(seq 1 60); do
+            code=$(curl -k -s -o /dev/null -w "%{http_code}" -u "admin:$SPLUNK_PASSWORD" \
+              https://localhost:8089/services/server/info 2>/dev/null || true)
+            [ "$code" = "200" ] && { echo "splunkd back up"; break; }
+            sleep 10
+          done
+          [ "$(curl -k -s -o /dev/null -w '%{http_code}' -u "admin:$SPLUNK_PASSWORD" https://localhost:8089/services/server/info)" = "200" ]
+
+      - name: Integration smoke (MCP tools + ai_config end-to-end)
+        run: python tests/integration/splunk_smoke.py
+
+      - name: Splunk container logs on failure
+        if: failure()
+        run: |
+          echo "=== docker logs (startup) ==="; docker logs --tail 120 splunk 2>&1 || true
+          echo "=== splunkd.log ==="; docker exec splunk tail -n 120 /opt/splunk/var/log/splunk/splunkd.log 2>&1 || true
+
+      - name: Teardown
+        if: always()
+        run: docker rm -f splunk || true
+
+  # License compliance: enumerate EVERY bundled third-party library — the npm
+  # production dependency closure AND the in-Splunk Python advisor / Agent SDK
+  # stack — into licenses/, and FAIL the build if any dependency is not a
+  # recognised open-source license (the "prove it's all OSS" gate the submission
+  # requires). Also uploads the full inventory (summary + manifest + per-package
+  # license texts) as an artifact, and warns (non-blocking) if the committed
+  # licenses/ has drifted from a fresh regeneration — deps float by version, so
+  # drift is a nudge to re-run the generator, not a hard failure.
+  licenses:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          submodules: true
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v5
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install npm deps (needed for the production license closure)
+        run: npm ci
+
+      - name: Install UCC framework
+        run: pip install "splunk-add-on-ucc-framework>=6.5.0"
+
+      - name: Build the native app (to enumerate the Python advisor stack's wheels)
+        run: bash splunk-app/deploy/build_agent_app.sh "$RUNNER_TEMP/uccbuild"
+
+      - name: Generate license inventory + enforce OSS-only policy (--check)
+        run: |
+          python scripts/generate_licenses.py \
+            --python-lib "$RUNNER_TEMP/uccbuild/ucc_app_builder/lib" --check
+
+      - name: Flag stale committed licenses/ (non-blocking — deps float by version)
+        run: |
+          if git diff --quiet -- licenses/; then
+            echo "licenses/ is up to date with a fresh regeneration."
+          else
+            echo "::warning::licenses/ differs from a fresh regeneration — re-run scripts/generate_licenses.py and commit. Diff stat:"
+            git --no-pager diff --stat -- licenses/ || true
+          fi
+
+      - name: Upload third-party license inventory
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: third-party-licenses
+          path: licenses/
+          retention-days: 7
+
+  # Browser e2e (Playwright) — hermetic: every /api/* call is mocked in the specs,
+  # so only the Vite front-end runs. Covers the wizard, the AI chat, and the Build
+  # Loop panel rendering a trace to AppInspect-CLEAN.
+  e2e:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          submodules: true
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v5
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Install Playwright browser
+        run: npx playwright install --with-deps chromium
+
+      - name: Run e2e tests
+        # The Playwright webServer binds Vite on E2E_PORT (default 5273, NOT
+        # vite's 5173) so the suite never collides with a developer's live dev
+        # server. Pinned explicitly here for clarity/reproducibility.
+        env:
+          E2E_PORT: '5273'
+        run: npm run test:e2e
+
+      - name: Upload Playwright report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-report
+          path: |
+            playwright-report/
+            test-results/
+          retention-days: 7

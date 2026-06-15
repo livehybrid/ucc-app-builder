@@ -1,0 +1,26 @@
+{
+  "compilerOptions": {
+    "target": "ES2020",
+    "module": "ESNext",
+    "moduleResolution": "bundler",
+    "esModuleInterop": true,
+    "strict": true,
+    "skipLibCheck": true,
+    "outDir": "../dist-server",
+    "rootDir": "..",
+    "declaration": true,
+    "resolveJsonModule": true
+  },
+  "include": [
+    "./**/*.ts",
+    "../src/lib/confSpec.ts",
+    "../src/lib/ai/modelProfile.ts",
+    "../src/lib/vfs.ts",
+    "../src/lib/generator.ts",
+    "../src/lib/imageUtils.ts",
+    "../src/types/app.ts",
+    "../src/types/components.ts",
+    "../src/types/globalConfig.ts"
+  ],
+  "exclude": ["node_modules", "../src/**/*.test.ts"]
+}

@@ -1,0 +1,229 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "Universal Configuration Console JSON Schema",
+  "definitions": {
+    "name": {
+      "type": "string",
+      "minLength": 1,
+      "pattern": "^[a-zA-Z0-9_]+$"
+    },
+    "version": {
+      "type": "string",
+      "minLength": 1
+    },
+    "displayName": {
+      "type": "string",
+      "minLength": 1
+    },
+    "restRoot": {
+      "type": "string",
+      "minLength": 1
+    },
+    "apiVersion": {
+      "type": "string",
+      "minLength": 1
+    },
+    "schemaVersion": {
+      "type": "string",
+      "minLength": 1
+    },
+    "meta": {
+      "type": "object",
+      "properties": {
+        "name": {
+          "$ref": "#/definitions/name"
+        },
+        "version": {
+          "$ref": "#/definitions/version"
+        },
+        "displayName": {
+          "$ref": "#/definitions/displayName"
+        },
+        "restRoot": {
+          "$ref": "#/definitions/restRoot"
+        },
+        "apiVersion": {
+          "$ref": "#/definitions/apiVersion"
+        },
+        "schemaVersion": {
+          "$ref": "#/definitions/schemaVersion"
+        },
+        "cloud_compatible": {
+          "type": "boolean"
+        },
+        "os-dependentLibraries": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "name": {
+                "type": "string"
+              },
+              "version": {
+                "type": "string"
+              },
+              "target": {
+                "type": "string"
+              }
+            }
+          }
+        }
+      },
+      "required": ["name", "version", "displayName", "restRoot"]
+    },
+    "entity": {
+      "type": "object",
+      "properties": {
+        "type": {
+          "type": "string"
+        },
+        "field": {
+          "type": "string"
+        },
+        "label": {
+          "type": "string"
+        },
+        "help": {
+          "type": "string"
+        },
+        "defaultValue": {
+          "type": ["string", "number", "boolean", "array"]
+        },
+        "options": {
+          "type": "object"
+        },
+        "required": {
+          "type": "boolean"
+        },
+        "encrypted": {
+          "type": "boolean"
+        },
+        "validators": {
+          "type": "array",
+          "items": {
+            "type": "object"
+          }
+        }
+      },
+      "required": ["type", "field", "label"]
+    },
+    "tab": {
+      "type": "object",
+      "properties": {
+        "name": {
+          "type": "string"
+        },
+        "title": {
+          "type": "string"
+        },
+        "entity": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/entity"
+          }
+        }
+      },
+      "required": ["name", "title", "entity"]
+    },
+    "configurationPage": {
+      "type": "object",
+      "properties": {
+        "title": {
+          "type": "string"
+        },
+        "description": {
+          "type": "string"
+        },
+        "tabs": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/tab"
+          }
+        }
+      },
+      "required": ["title", "tabs"]
+    },
+    "inputsPage": {
+      "type": "object",
+      "properties": {
+        "title": {
+          "type": "string"
+        },
+        "description": {
+          "type": "string"
+        },
+        "table": {
+          "type": "object",
+          "properties": {
+            "actions": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            },
+            "header": {
+              "type": "array",
+              "items": {
+                "type": "object"
+              }
+            }
+          }
+        },
+        "services": {
+          "type": "array",
+          "items": {
+            "type": "object"
+          }
+        }
+      }
+    },
+    "pages": {
+      "type": "object",
+      "properties": {
+        "configuration": {
+          "$ref": "#/definitions/configurationPage"
+        },
+        "inputs": {
+          "$ref": "#/definitions/inputsPage"
+        }
+      }
+    },
+    "alert": {
+      "type": "object",
+      "properties": {
+        "name": {
+          "type": "string"
+        },
+        "label": {
+          "type": "string"
+        },
+        "description": {
+          "type": "string"
+        },
+        "entity": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/entity"
+          }
+        }
+      },
+      "required": ["name", "label"]
+    }
+  },
+  "type": "object",
+  "properties": {
+    "meta": {
+      "$ref": "#/definitions/meta"
+    },
+    "pages": {
+      "$ref": "#/definitions/pages"
+    },
+    "alerts": {
+      "type": "array",
+      "items": {
+        "$ref": "#/definitions/alert"
+      }
+    }
+  },
+  "required": ["meta", "pages"]
+}

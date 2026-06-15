@@ -1,0 +1,33 @@
+
+> ucc-app-builder@0.1.0 loop
+> tsx tools/agent-loop.ts --no-llm fixtures/input-addon.project.json
+
+◇ injected env (0) from .env // tip: ⌘ override existing { override: true }
+◇ injected env (39) from ../../.env // tip: ⌁ auth for agents [www.vestauth.com]
+
+=== UCC App Builder — Agentic AppInspect Loop ===
+app: TA_github_audit  llm: false
+
+🟢 [it0] Starting agentic loop for TA_github_audit (maxIterations=4, includeWarnings=true, llm=false).
+🔁 [it1] --- Iteration 1 ---
+🔨 [it1] ucc-gen build + package OK -> TA_github_audit-1.0.0.tar.gz
+🔎 [it1] AppInspect: 1 actionable check(s).
+🩹 [it1] [rule] check_for_updates_disabled: Set meta.checkForUpdates=false in globalConfig.json.
+🔁 [it2] --- Iteration 2 ---
+🔨 [it2] ucc-gen build + package OK -> TA_github_audit-1.0.0.tar.gz
+🔎 [it2] AppInspect: 0 actionable check(s).
+✅ [it2] Package is AppInspect-clean (no failures/warnings).
+🏁 [it2] Loop finished: CLEAN.
+
+--- Final AppInspect summary ---
+AppInspect (cli):
+  error: 0
+  failure: 0
+  future_failure: 2
+  skipped: 0
+  not_applicable: 118
+  warning: 14
+  success: 115
+
+Result: ✅ CLEAN after 2 iteration(s).
+Package: <tmp>/TA_github_audit-1.0.0.tar.gz

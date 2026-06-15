@@ -1,0 +1,5 @@
+{
+  "difficulty": "easy",
+  "tags": ["rest-poll", "modular-input", "ucc-framework"],
+  "description": "Poll a JSON REST endpoint and emit one event per record."
+}

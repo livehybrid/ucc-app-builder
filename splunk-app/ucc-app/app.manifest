@@ -1,0 +1,13 @@
+{
+    "info": {
+        "author": [{ "company": null, "email": null, "name": "LiveHybrid" }],
+        "description": "Agentic Splunk add-on builder. Exposes app-building tools (author globalConfig, build with ucc-gen, validate with AppInspect, package) as MCP tools the Splunk AI Assistant can call, plus an in-app advisor on Splunk hosted models and a Monaco editor UI.",
+        "id": { "group": null, "name": "ucc_app_builder", "version": "0.1.0" },
+        "license": { "name": "Apache License 2.0", "text": "./LICENSES/Apache-2.0.txt", "uri": null },
+        "title": "UCC App Builder"
+    },
+    "inputGroups": null,
+    "schemaVersion": "2.0.0",
+    "supportedDeployments": ["_standalone", "_distributed", "_search_head_clustering"],
+    "targetWorkloads": ["_search_heads"]
+}

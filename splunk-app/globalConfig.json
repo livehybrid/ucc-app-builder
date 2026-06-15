@@ -1,0 +1,136 @@
+{
+    "meta": {
+        "name": "ucc_app_builder",
+        "restRoot": "ucc_app_builder",
+        "displayName": "UCC App Builder",
+        "version": "0.0.0+fa66415",
+        "schemaVersion": "0.0.10",
+        "checkForUpdates": false,
+        "supportedThemes": [
+            "light",
+            "dark"
+        ]
+    },
+    "pages": {
+        "configuration": {
+            "title": "Configuration",
+            "description": "Configure the AI provider used by the App Builder advisor and AI chat.",
+            "tabs": [
+                {
+                    "name": "ai_provider",
+                    "title": "AI Provider",
+                    "entity": [
+                        {
+                            "type": "singleSelect",
+                            "label": "Provider",
+                            "field": "provider",
+                            "defaultValue": "openrouter",
+                            "required": true,
+                            "help": "LLM provider used by the agent.",
+                            "options": {
+                                "disableSearch": true,
+                                "autoCompleteFields": [
+                                    {
+                                        "label": "OpenRouter",
+                                        "value": "openrouter"
+                                    },
+                                    {
+                                        "label": "OpenAI",
+                                        "value": "openai"
+                                    },
+                                    {
+                                        "label": "Anthropic",
+                                        "value": "anthropic"
+                                    },
+                                    {
+                                        "label": "Google",
+                                        "value": "google"
+                                    }
+                                ]
+                            }
+                        },
+                        {
+                            "type": "text",
+                            "label": "API key",
+                            "field": "api_key",
+                            "encrypted": true,
+                            "required": false,
+                            "help": "Stored encrypted in storage/passwords. Leave blank to keep the existing key.",
+                            "validators": [
+                                {
+                                    "type": "string",
+                                    "errorMsg": "Max 256 chars",
+                                    "minLength": 0,
+                                    "maxLength": 256
+                                }
+                            ]
+                        },
+                        {
+                            "type": "text",
+                            "label": "Base URL",
+                            "field": "base_url",
+                            "required": false,
+                            "defaultValue": "https://openrouter.ai/api/v1",
+                            "help": "OpenAI-compatible base URL (OpenRouter/OpenAI).",
+                            "validators": [
+                                {
+                                    "type": "string",
+                                    "errorMsg": "Max 255 chars",
+                                    "minLength": 0,
+                                    "maxLength": 255
+                                }
+                            ]
+                        },
+                        {
+                            "type": "text",
+                            "label": "Default model",
+                            "field": "model",
+                            "required": false,
+                            "defaultValue": "anthropic/claude-sonnet-4.6",
+                            "validators": [
+                                {
+                                    "type": "string",
+                                    "errorMsg": "Max 128 chars",
+                                    "minLength": 0,
+                                    "maxLength": 128
+                                }
+                            ]
+                        },
+                        {
+                            "type": "text",
+                            "label": "Temperature",
+                            "field": "temperature",
+                            "required": false,
+                            "help": "Sampling temperature 0-2 (default 0.3).",
+                            "validators": [
+                                {
+                                    "type": "string",
+                                    "errorMsg": "Max 8 chars",
+                                    "minLength": 0,
+                                    "maxLength": 8
+                                }
+                            ],
+                            "defaultValue": "0.3"
+                        },
+                        {
+                            "type": "text",
+                            "label": "Max agent iterations",
+                            "field": "max_iterations",
+                            "required": false,
+                            "defaultValue": "40",
+                            "help": "Planner/executor turns before the agent stops.",
+                            "validators": [
+                                {
+                                    "type": "string",
+                                    "errorMsg": "Max 4 chars",
+                                    "minLength": 0,
+                                    "maxLength": 4
+                                }
+                            ]
+                        }
+                    ]
+                }
+            ]
+        }
+    }
+}
