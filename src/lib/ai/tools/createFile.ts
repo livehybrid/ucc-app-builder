@@ -3,14 +3,14 @@ import { Tool, validateWritePath, requireStringArg } from '../toolTypes';
 export const createFile: Tool = {
   name: 'create_file',
   description:
-    'Create a brand-new file. Fails if the file already exists — use apply_patch or write_file to modify existing files. Paths start with the app id (match list_files output).',
+    'Create a brand-new file. Fails if the file already exists - use apply_patch or write_file to modify existing files. Paths start with the app id (match list_files output).',
   parameters: {
     type: 'object',
     properties: {
       path: {
         type: 'string',
         description:
-          'The path of the new file, starting with the app id — under "<appId>/package/", except globalConfig.json which must go at the project root ("<appId>/globalConfig.json", beside package/, never inside it).',
+          'The path of the new file, starting with the app id - under "<appId>/package/", except globalConfig.json which must go at the project root ("<appId>/globalConfig.json", beside package/, never inside it).',
       },
       content: {
         type: 'string',

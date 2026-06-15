@@ -1,4 +1,4 @@
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useEffect } from 'react';
 import styled from 'styled-components';
 import Button from '@splunk/react-ui/Button';
 import Heading from '@splunk/react-ui/Heading';
@@ -9,6 +9,12 @@ import List from '@splunk/react-ui/List';
 import Badge from '@splunk/react-ui/Badge';
 import File from '@splunk/react-ui/File';
 import { importAppFromZip } from '../lib/importer';
+import {
+  installedAppsAvailable,
+  listInstalledApps,
+  importInstalledApp,
+  type InstalledApp,
+} from '../lib/installedApps';
 import type { ImportAnalysis } from '../types/manifest';
 
 interface ImportExportProps {
@@ -35,6 +41,32 @@ export function ImportExport({ onImportComplete }: ImportExportProps) {
   const [isAnalyzing, setIsAnalyzing] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [uploadedFilename, setUploadedFilename] = useState<string | null>(null);
+  // Seed-from-installed (native Splunk app only): add-ons already installed on this Splunk.
+  const [installed, setInstalled] = useState<InstalledApp[]>([]);
+  const [loadingInstalled, setLoadingInstalled] = useState(false);
+
+  useEffect(() => {
+    if (!installedAppsAvailable()) return;
+    setLoadingInstalled(true);
+    listInstalledApps()
+      .then(setInstalled)
+      .catch(() => {})
+      .finally(() => setLoadingInstalled(false));
+  }, []);
+
+  const seedFromInstalled = useCallback(async (appId: string) => {
+    setUploadedFilename(appId);
+    setIsAnalyzing(true);
+    setError(null);
+    setAnalysis(null);
+    try {
+      setAnalysis(await importInstalledApp(appId));
+    } catch (err) {
+      setError((err as Error).message);
+    } finally {
+      setIsAnalyzing(false);
+    }
+  }, []);
 
   const handleRequestAdd: (files: globalThis.File[]) => void = useCallback(async (files) => {
     const file = files[0];
@@ -90,6 +122,52 @@ export function ImportExport({ onImportComplete }: ImportExportProps) {
       <p style={{ color: '#9b9ea3', marginBottom: 24 }}>
         Upload a Splunk app ZIP file to analyze its structure and extract source files.
       </p>
+
+      {installedAppsAvailable() && (
+        <div style={{ marginBottom: 24 }} data-testid="seed-installed">
+          <CollapsiblePanel title="Seed from an add-on installed on this Splunk" defaultOpen>
+
+            <p style={{ color: '#9b9ea3', marginTop: 0 }}>
+              Load an installed UCC add-on's source into the builder to extend it with the AI -
+              no manual export. (Vendored libraries, bytecode and instance-local config are
+              excluded.)
+            </p>
+            {loadingInstalled ? (
+              <WaitSpinner />
+            ) : installed.length === 0 ? (
+              <p style={{ color: '#9b9ea3' }}>No UCC add-ons (with a globalConfig.json) found.</p>
+            ) : (
+              <List>
+                {installed.map((a) => (
+                  <List.Item key={a.appId}>
+                    <div
+                      style={{
+                        display: 'flex',
+                        justifyContent: 'space-between',
+                        alignItems: 'center',
+                        width: '100%',
+                        gap: 8,
+                      }}
+                    >
+                      <span>
+                        <strong>{a.displayName}</strong>{' '}
+                        <code style={{ color: '#9b9ea3', fontSize: '0.85rem' }}>{a.appId}</code>
+                        {a.version ? ` · v${a.version}` : ''}
+                      </span>
+                      <Button
+                        appearance="default"
+                        label="Seed"
+                        disabled={isAnalyzing}
+                        onClick={() => seedFromInstalled(a.appId)}
+                      />
+                    </div>
+                  </List.Item>
+                ))}
+              </List>
+            )}
+          </CollapsiblePanel>
+        </div>
+      )}
 
       <File
         accept=".tgz,.zip,.spl,.tar.gz"

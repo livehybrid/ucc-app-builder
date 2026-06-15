@@ -92,7 +92,7 @@ interface GlobalConfig {
  * Convert an EntityField to a GlobalConfigEntity
  */
 function entityFieldToGlobalConfig(f: import('./components').EntityField): GlobalConfigEntity {
-  // UCC has NO `password` entity type — a secret field is a `text` entity with
+  // UCC has NO `password` entity type - a secret field is a `text` entity with
   // `encrypted: true`. The wizard/MCP use a friendly `password` type, so we translate
   // it here. Passing `type: "password"` straight through makes the globalConfig fail
   // ucc-gen schema validation ("is not valid under any of the given schemas").
@@ -274,7 +274,7 @@ export function createGlobalConfig(
       restRoot: appId,
       version,
       displayName,
-      // Highest version accepted by the installed ucc-gen (6.4.x) — ucc-gen
+      // Highest version accepted by the installed ucc-gen (6.4.x) - ucc-gen
       // migrates older values forward on build, but author at current.
       schemaVersion: '0.0.10',
       supportedThemes: ['light', 'dark'],
@@ -416,7 +416,7 @@ export function createGlobalConfig(
           { label: 'Status', field: 'disabled' },
         ],
         // Valid InputsTable actions are ONLY edit/delete/clone/search ('enable'
-        // is not in the schema enum — enable/disable comes from the `disabled`
+        // is not in the schema enum - enable/disable comes from the `disabled`
         // status column automatically). ucc-gen 6.5+ rejects invalid actions.
         actions: ['edit', 'delete', 'clone'],
       },

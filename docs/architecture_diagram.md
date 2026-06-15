@@ -35,7 +35,8 @@ Splunk add-on by calling tools on Splunk's own MCP server.**
         │                                                         │  bin/builder_tools.py
         │                                                         ▼
         │                                          KV-backed, path-confined project (per user)
-        └─ build/package tools proxy ───────────────────▶  Node build engine (ucc-gen + AppInspect)
+        └─ ucc_build_and_inspect ───────────────▶  bin/builder_build.py  (ucc-gen + AppInspect,
+                                                    vendored in lib/, run in Splunk's python)
 ```
 
 `ucc_ping · ucc_create_addon · ucc_write_file · ucc_read_file · ucc_list_project ·
@@ -69,7 +70,8 @@ server (`bin/tools.py` → `registry.run()`).
         │                       write_file, read_file, list_project, build_and_inspect)
         │                              │            (same KV-backed, path-confined store)
         ▼                              ▼
-  {ok, answer, trace}          build_and_inspect ──▶ Node build engine (ucc-gen + AppInspect)
+  {ok, answer, trace}          build_and_inspect ──▶ bin/builder_build.py (ucc-gen + AppInspect,
+                                                     vendored in lib/, in Splunk's python)
                                                           └─▶ AppInspect-CLEAN .tar.gz
 ```
 
@@ -92,13 +94,18 @@ and write *only its own add-on project*, never the Splunk filesystem or other ap
 
 ## 2. The keystone loop — generate → AppInspect → fix → repeat
 
-Both faces share one engine: `server/services/agentLoop.ts` (`runAgentLoop`). The native
-app's `build_and_inspect` tool proxies to it over `POST /api/mcp/build_engine`; the
-standalone UI calls it directly.
+Both faces run the **same loop**, each in its own runtime - **no Node sidecar in the native
+app**. The native Splunk app runs ucc-gen + AppInspect **in Splunk's own python** via
+`bin/builder_build.py` (vendored into `lib/`), driven by `bin/builder_api.py` for the SPA's
+`/api/build` + `/api/agent/build-loop` routes and by `bin/builder_agent_tools.py` for the
+Agent SDK's `build_and_inspect` tool. The standalone web app runs the equivalent loop in
+Node (`server/services/agentLoop.ts`, `runAgentLoop`). Same steps, two implementations:
 
 1. **Generate** — write the source VFS to a temp dir; `ucc-gen build/package` → `.tar.gz`.
 2. **Inspect** — `splunk-appinspect inspect` → structured checks. The **clean gate is
-   failures-only** (AppInspect *warnings* are advisory and do not block packaging).
+   failures + errors only** - AppInspect *warnings* **and** *future-failures* (checks that
+   only fail at a future Splunk release) are **advisory**: surfaced to the user but they do
+   **not** block packaging.
 3. **Fix** — **deterministic rules first** (free, instant; e.g. auto-generate the required
    `package/app.manifest` ucc-gen doesn't create; `checkForUpdates=false` in *globalConfig*,
    not the regenerated `app.conf`), then an **LLM fixer** (Claude via OpenRouter) for the

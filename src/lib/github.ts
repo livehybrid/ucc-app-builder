@@ -46,7 +46,7 @@ async function request<T>(endpoint: string, options: RequestInit = {}, token?: s
  * Turn a GitHub device-flow failure into an actionable message. GitHub returns
  * `404 {"error":"Not Found"}` when the Client ID isn't a recognised OAuth App,
  * and `{"error":"device_flow_disabled"}` when the app exists but Device Flow is
- * off — both of which otherwise surface to the user as a bare "404".
+ * off - both of which otherwise surface to the user as a bare "404".
  */
 export function deviceFlowErrorMessage(status: number, body: string): string {
   let parsed: { error?: string; error_description?: string } = {};
@@ -69,7 +69,7 @@ export async function initiateDeviceFlow(clientId: string): Promise<DeviceFlowRe
     throw new Error('Enter your GitHub OAuth App Client ID first.');
   }
   // Backend proxy (server/index.ts) forwards to https://github.com/login/device/code
-  // — GitHub's OAuth endpoints don't send CORS headers, so the browser can't call
+  // - GitHub's OAuth endpoints don't send CORS headers, so the browser can't call
   // them directly.
   const response = await fetch('/api/github/device/code', {
     method: 'POST',
@@ -453,7 +453,7 @@ export async function pushFiles(
   message: string,
   filesToIgnore: string[] = [],
   /** Extra repo-relative files (path already relative to the repo root, NOT app-id
-   *  prefixed) — e.g. a generated .github/workflows/build-validate.yml. */
+   *  prefixed) - e.g. a generated .github/workflows/build-validate.yml. */
   extraFiles: Array<{ path: string; content: string }> = []
 ): Promise<void> {
   const owner = repo.full_name.split('/')[0];
@@ -464,25 +464,40 @@ export async function pushFiles(
   let baseTreeSha: string | undefined;
   let refName = 'heads/main';
 
-  try {
-    const ref = await getRef(token, owner, repoName, 'heads/main').catch(() =>
-      getRef(token, owner, repoName, 'heads/master')
-    );
+  // A freshly created repo (createRepo auto_init: true) initialises its git database -
+  // the initial README commit - ASYNCHRONOUSLY. Pushing immediately races that and
+  // 404s on git/refs and git/trees. Retry getRef with backoff so the auto_init commit
+  // is available before we build on it (and so createTree below has a ready git backend).
+  let ref: GitRef | undefined;
+  for (let attempt = 0; attempt < 6; attempt++) {
+    try {
+      ref = await getRef(token, owner, repoName, 'heads/main').catch(() =>
+        getRef(token, owner, repoName, 'heads/master')
+      );
+      break;
+    } catch {
+      if (attempt === 5) break; // give up - fall through to the fresh-repo path
+      await new Promise((r) => setTimeout(r, 800 * (attempt + 1)));
+    }
+  }
+  if (ref?.ref && ref.object?.sha) {
     refName = ref.ref.replace('refs/', '');
     parentSha = ref.object.sha;
-
-    // Get commit to get tree
-    const commit = await request<GitCommit>(
-      `/repos/${owner}/${repoName}/git/commits/${parentSha}`,
-      {},
-      token
-    );
-    baseTreeSha = commit.tree.sha;
-  } catch (e: unknown) {
-    // If empty repo, no parents.
-    // Usually auto_init creates one. If not, we start fresh.
-    console.log('No ref found, starting fresh');
-    refName = 'heads/main'; // Default to main
+    try {
+      const commit = await request<GitCommit>(
+        `/repos/${owner}/${repoName}/git/commits/${parentSha}`,
+        {},
+        token
+      );
+      baseTreeSha = commit.tree.sha;
+    } catch {
+      // Ref exists but commit lookup failed - push fresh onto the ref.
+      baseTreeSha = undefined;
+    }
+  } else {
+    // Empty repo with no ref yet - start fresh (no parent/base tree).
+    console.log('No ref found after retries, starting fresh');
+    refName = 'heads/main';
   }
 
   // 2. Build tree items with inline content (reduces API calls)
@@ -511,7 +526,7 @@ export async function pushFiles(
     });
   }
 
-  // Repo-relative extras (e.g. CI/CD workflow) — pushed at their given path verbatim.
+  // Repo-relative extras (e.g. CI/CD workflow) - pushed at their given path verbatim.
   for (const extra of extraFiles) {
     if (!extra?.path) continue;
     treeItems.push({ path: extra.path, mode: '100644', type: 'blob', content: extra.content });

@@ -127,6 +127,10 @@ grounding.
   data flowing?" overview (timechart/line for trend, stats/bar for breakdown, single for KPIs)
 - Use the generate_savedsearch tool to add a scheduled report or alert (name + SPL, optional
   cronSchedule and alert={condition, threshold, severity})
+- Use the generate_tests tool to scaffold pytest-splunk-addon validation (sourcetypes:
+  [{sourcetype, cimDataModels?, sampleEvents?}]) AFTER props/transforms exist — it proves
+  sourcetype/field/CIM correctness. Seed sampleEvents with real events captured via Test Input
+  (the input emulator) so the data loop is: emulate → author props/transforms → generate_tests
 - Use the get_splunklib_help tool to explain concepts with code examples
 - Use the get_splunk_sdk_reference tool before writing Python code that uses Splunk SDK/UCC helper APIs
 - Use the validate_ucc_conformance tool before finalizing major file edits to check UCC alignment

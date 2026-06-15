@@ -1,5 +1,5 @@
 """
-UCC App Builder — MCP tool REST handlers (the EXPOSE side for Splunk 10.4).
+UCC App Builder - MCP tool REST handlers (the EXPOSE side for Splunk 10.4).
 
 Each MCP tool in default/tools.conf maps to a restmap.conf endpoint that lands
 here. The Splunk AI Assistant calls these to build a UCC add-on:
@@ -10,7 +10,7 @@ Project files live in the KV collection `ucc_builder_files`, scoped to the calle
 session, so the Monaco UI and the agent see the same files. build/package proxy to
 the Node build engine (ucc-gen + AppInspect) whose URL is an app config setting.
 
-SECURITY: file paths are confined to the add-on project subtree — absolute paths,
+SECURITY: file paths are confined to the add-on project subtree - absolute paths,
 '..'/'.'/empty segments, backslashes and NUL bytes are rejected, so the agent can
 never read or write anything else on the Splunk host.
 """
@@ -33,9 +33,128 @@ get_session_key = builder_common.get_session_key
 to_safe_project_path = builder_common.to_safe_project_path
 derive_app_id = builder_common.derive_app_id
 KV = builder_common.KVProjectStore
-sidecar_call = builder_common.sidecar_call
+
+
+def _load_sibling(mod):
+    s = importlib.util.spec_from_file_location(mod, os.path.join(_bin_dir, mod + '.py'))
+    m = importlib.util.module_from_spec(s)
+    s.loader.exec_module(m)
+    return m
+
+
+# Native, in-Splunk implementations (no Node sidecar): deterministic artifact generators
+# and the ucc-gen + AppInspect build engine. builder_build is loaded lazily inside _build
+# (it pulls in subprocess/build-only deps that the lightweight tool handlers don't need).
+builder_generators = _load_sibling('builder_generators')
 
 APP = 'ucc_app_builder'
+
+
+def _coerce_array(v):
+    """The Splunk AI Assistant MCP may pass nested args as JSON strings; accept both."""
+    if isinstance(v, list):
+        return v
+    if isinstance(v, str) and v.strip().startswith('['):
+        try:
+            p = json.loads(v)
+            return p if isinstance(p, list) else []
+        except ValueError:
+            return []
+    return []
+
+
+def _coerce_object(v):
+    if isinstance(v, str) and v.strip().startswith('{'):
+        try:
+            return json.loads(v)
+        except ValueError:
+            return None
+    return v
+
+# Seed-from-installed: read an installed add-on's authoring source from $SPLUNK_HOME/etc/apps.
+_SPLUNK_HOME = os.environ.get('SPLUNK_HOME') or os.path.normpath(
+    os.path.join(_bin_dir, '..', '..', '..', '..'))
+_APPS_DIR = os.path.join(_SPLUNK_HOME, 'etc', 'apps')
+_SEED_MAX_FILE = 256 * 1024          # 256 KB per file (skip larger)
+_SEED_MAX_TOTAL = 4 * 1024 * 1024    # 4 MB total response cap
+# Never descend into these (vendored deps, bytecode, instance-local config/secrets, VCS).
+_SEED_PRUNE_DIRS = ('__pycache__', 'lib', 'local', '.git', 'node_modules')
+_SEED_BIN_EXT = ('.pyc', '.png', '.jpg', '.jpeg', '.gif', '.ico', '.svg', '.gz', '.tgz',
+                 '.zip', '.so', '.dll', '.dylib', '.whl', '.ttf', '.woff', '.woff2', '.eot',
+                 '.pdf', '.jar', '.class', '.bin', '.dat', '.db')
+
+
+def _safe_app_id(raw):
+    """An app id is a single etc/apps directory name; reject anything that could escape it."""
+    import re
+    s = str(raw or '').strip()
+    return s if (re.match(r'^[A-Za-z0-9._-]{1,128}$', s) and '..' not in s) else None
+
+
+def _find_globalconfig(app_dir):
+    # Source layouts keep it at the root or package/; a BUILT add-on ships it under the
+    # appserver UI bundle (appserver/static/js/build/globalConfig.json) - the canonical
+    # location ucc-gen emits, present in every installed UCC add-on.
+    for cand in ('globalConfig.json',
+                 os.path.join('package', 'globalConfig.json'),
+                 os.path.join('appserver', 'static', 'js', 'build', 'globalConfig.json')):
+        p = os.path.join(app_dir, cand)
+        if os.path.isfile(p):
+            return p
+    return None
+
+
+def _is_ucc_app(app_dir):
+    """Recognise a UCC add-on. globalConfig.json is a BUILD INPUT that ucc-gen consumes -
+    the installed/built add-on does NOT ship it - so also accept the generated markers a
+    built UCC add-on always carries: a `<app>_rh_<name>.py` REST handler and/or the
+    appserver SPA build dir. (A source-layout add-on still matches via globalConfig.json.)"""
+    import glob
+    if _find_globalconfig(app_dir):
+        return True
+    if glob.glob(os.path.join(app_dir, 'bin', '*_rh_*.py')):
+        return True
+    if os.path.isdir(os.path.join(app_dir, 'appserver', 'static', 'js', 'build')):
+        return True
+    return False
+
+
+def _app_meta(app_dir):
+    """(displayName, version) for an installed app - from globalConfig.json meta when
+    present, else default/app.conf ([ui] label + [launcher] version)."""
+    gc = _find_globalconfig(app_dir)
+    if gc:
+        try:
+            with open(gc, 'r', encoding='utf-8') as fh:
+                m = (json.load(fh) or {}).get('meta', {}) or {}
+            if m.get('displayName') or m.get('version'):
+                return m.get('displayName'), str(m.get('version') or '')
+        except Exception:  # noqa: BLE001
+            pass
+    label, version = None, ''
+    try:
+        with open(os.path.join(app_dir, 'default', 'app.conf'), 'r',
+                  encoding='utf-8', errors='replace') as fh:
+            for line in fh:
+                s = line.strip()
+                if label is None and s.startswith('label') and '=' in s:
+                    label = s.split('=', 1)[1].strip()
+                elif not version and s.startswith('version') and '=' in s:
+                    version = s.split('=', 1)[1].strip()
+    except OSError:
+        pass
+    return label, version
+
+
+def _seed_include(rel):
+    """Authoring source only: default/ + bin/ + package/ + README/ + the default metadata.
+    (globalConfig.json is added explicitly at the project root by the import handler;
+    lib/local/__pycache__/appserver are pruned or excluded.)"""
+    if rel.endswith(_SEED_BIN_EXT):
+        return False
+    if rel == 'metadata/default.meta':
+        return True
+    return rel.split('/', 1)[0] in ('default', 'bin', 'package', 'README')
 
 
 class BuilderHandler(PersistentServerConnectionApplication):
@@ -60,7 +179,7 @@ class BuilderHandler(PersistentServerConnectionApplication):
             if handler is None:
                 return json_response({'error': f'Unknown tool: {tool}'}, status=404)
             return handler(store, args, session_key)
-        except Exception as e:  # noqa: BLE001 — surface any error as JSON, never 500-with-stack
+        except Exception as e:  # noqa: BLE001 - surface any error as JSON, never 500-with-stack
             return json_response({'error': str(e)}, status=500)
 
     @staticmethod
@@ -139,6 +258,32 @@ class BuilderHandler(PersistentServerConnectionApplication):
         files = store.list_paths()
         return json_response({'ok': True, 'appId': store.app_id(), 'files': files})
 
+    def _t_sync_project(self, store, args, _sk):
+        """Replace the agent's KV project with the SPA's current VFS, so a Splunk-mode
+        agent run extends the project the user is actually looking at (imported / wizard /
+        seeded), instead of a stale or empty KV project. The SPA calls this right before
+        agent_start; the agent's done-event then syncs KV back to the VFS.
+
+        An EMPTY files[] with no appId CLEARS the project - so starting a new app (empty
+        VFS) doesn't leave the agent reading a previously-built one (it would otherwise see
+        'a project is already loaded' and extend the old app instead of starting fresh)."""
+        app_id = str(args.get('appId') or '').strip()
+        files = args.get('files')
+        if not isinstance(files, list):
+            return json_response({'error': 'files[] is required'}, status=400)
+        if files and not app_id:
+            return json_response({'error': 'appId is required when files are provided'}, status=400)
+        store.reset(app_id, str(args.get('version') or '1.0.0'))
+        written = 0
+        for f in files:
+            if not isinstance(f, dict):
+                continue
+            safe = to_safe_project_path(app_id, str(f.get('path') or ''))
+            if safe is not None:
+                store.write(safe, str(f.get('content') or ''))
+                written += 1
+        return json_response({'ok': True, 'appId': app_id, 'files': written})
+
     # --- My Apps: save / list / resume / delete add-on projects (KV-backed) ----
     def _apps(self, store, session_key):
         return builder_common.KVAppLibrary(session_key, APP, user=getattr(store, 'user', None))
@@ -178,35 +323,151 @@ class BuilderHandler(PersistentServerConnectionApplication):
         app_id = store.app_id()
         if not app_id:
             return json_response({'error': 'call ucc_create_addon first'}, status=400)
-        result, err = sidecar_call('/api/generate/dashboard', {
-            'title': args.get('title'), 'description': args.get('description'),
-            'panels': args.get('panels'), 'theme': args.get('theme'),
-        }, session_key)
-        if err or not result or not result.get('ok'):
-            return json_response({'error': err or (result or {}).get('error') or 'generation failed'},
-                                 status=400)
-        safe = to_safe_project_path(app_id, result.get('path') or '')
+        panels = _coerce_array(args.get('panels'))
+        if not args.get('title') or not panels:
+            return json_response({'error': 'title and a non-empty panels[] are required'}, status=400)
+        try:
+            spec = {'title': args.get('title'), 'description': args.get('description'),
+                    'panels': panels, 'theme': args.get('theme')}
+            content = builder_generators.build_dashboard_view_xml(spec)
+            file_name = builder_generators.view_file_name(args.get('title'))
+        except Exception as e:  # noqa: BLE001
+            return json_response({'error': str(e)}, status=400)
+        safe = to_safe_project_path(app_id, 'package/default/data/ui/views/%s' % file_name)
         if safe:
-            store.write(safe, result.get('content') or '')
-        return json_response({'ok': True, 'path': safe, 'fileName': result.get('fileName'),
-                              'text': f"Created Dashboard Studio dashboard {result.get('fileName')}."})
+            store.write(safe, content)
+        return json_response({'ok': True, 'path': safe, 'fileName': file_name,
+                              'text': f"Created Dashboard Studio dashboard {file_name}."})
 
     def _t_generate_savedsearch(self, store, args, session_key):
         app_id = store.app_id()
         if not app_id:
             return json_response({'error': 'call ucc_create_addon first'}, status=400)
-        result, err = sidecar_call('/api/generate/savedsearch', dict(args), session_key)
-        if err or not result or not result.get('ok'):
-            return json_response({'error': err or (result or {}).get('error') or 'generation failed'},
-                                 status=400)
+        if not args.get('name') or not args.get('search'):
+            return json_response({'error': 'name and search are required'}, status=400)
+        try:
+            spec = dict(args)
+            spec['alert'] = _coerce_object(args.get('alert'))
+            stanza = builder_generators.build_savedsearch_stanza(spec)
+        except Exception as e:  # noqa: BLE001
+            return json_response({'error': str(e)}, status=400)
         safe = to_safe_project_path(app_id, 'package/default/savedsearches.conf')
-        stanza = result.get('stanza') or ''
         existing = (store.read(safe) or '') if safe else ''
         content = (existing.rstrip() + '\n\n' + stanza) if existing.strip() else stanza
         if safe:
             store.write(safe, content)
         return json_response({'ok': True, 'path': safe,
                               'text': f"Added saved search [{args.get('name')}] to savedsearches.conf."})
+
+    def _t_generate_tests(self, store, args, session_key):
+        """Generate a pytest-splunk-addon test scaffold (props/transforms/CIM validation)
+        for the project's sourcetypes, optionally seeded with sample events captured by the
+        input emulator. The deterministic file set is built natively in-Splunk; we write it
+        into the KV project under <appId>/tests/."""
+        app_id = store.app_id()
+        if not app_id:
+            return json_response({'error': 'call ucc_create_addon first'}, status=400)
+        try:
+            scaffold = builder_generators.build_pytest_scaffold({
+                'addonName': app_id, 'sourcetypes': _coerce_array(args.get('sourcetypes'))})
+        except Exception as e:  # noqa: BLE001
+            return json_response({'error': str(e)}, status=400)
+        written = []
+        for f in (scaffold.get('files') or []):
+            safe = to_safe_project_path(app_id, str(f.get('path') or ''))
+            if safe:
+                store.write(safe, str(f.get('content') or ''))
+                written.append(safe)
+        return json_response({'ok': True, 'files': written,
+                              'text': f"Generated pytest-splunk-addon scaffold ({len(written)} files) "
+                                      "under tests/. Run it against a Splunk to validate props/transforms/CIM."})
+
+    # --- Seed from an add-on already installed on this Splunk ----------------
+    def _t_list_installed_apps(self, store, args, session_key):
+        """List installed UCC add-ons (those with a globalConfig.json) that can be seeded
+        into the builder."""
+        apps = []
+        try:
+            for name in sorted(os.listdir(_APPS_DIR)):
+                if name.startswith('.'):
+                    continue
+                app_dir = os.path.join(_APPS_DIR, name)
+                if not os.path.isdir(app_dir) or not _is_ucc_app(app_dir):
+                    continue
+                label, version = _app_meta(app_dir)
+                apps.append({'appId': name,
+                             'displayName': label or name,
+                             'version': version,
+                             'isUCCApp': True})
+        except OSError as e:
+            return json_response({'error': str(e)}, status=500)
+        return json_response({'ok': True, 'apps': apps})
+
+    def _t_import_installed_app(self, store, args, session_key):
+        """Read an installed add-on's authoring source (globalConfig + default/ + bin/ +
+        package/ + README/), excluding vendored libs, bytecode and instance-local config,
+        and return it as files[] for the builder to load into its VFS."""
+        app_id = _safe_app_id(args.get('appId'))
+        if not app_id:
+            return json_response({'error': 'valid appId is required'}, status=400)
+        apps_real = os.path.realpath(_APPS_DIR)
+        root = os.path.realpath(os.path.join(_APPS_DIR, app_id))
+        # Confinement: the resolved path must be a direct child of etc/apps (blocks
+        # traversal + symlink escapes), exist, and contain a globalConfig.json.
+        if os.path.dirname(root) != apps_real or not os.path.isdir(root):
+            return json_response({'error': 'app not found'}, status=404)
+        if not _is_ucc_app(root):
+            return json_response({'error': 'not a UCC add-on'}, status=400)
+
+        files, skipped, seen = [], [], set()
+        state = {'total': 0, 'truncated': False}
+
+        def _add(target, content, size):
+            if target in seen:
+                return
+            if state['total'] + size > _SEED_MAX_TOTAL:
+                state['truncated'] = True
+                return
+            seen.add(target)
+            state['total'] += size
+            files.append({'path': target, 'content': content})
+
+        # The canonical globalConfig.json is the add-on's source of truth (real inputs/
+        # accounts/config) - emit it at the PROJECT ROOT regardless of where it physically
+        # lives (a BUILT add-on keeps it under appserver/static/js/build), so the builder
+        # treats the seed as a normal UCC source project.
+        gc = _find_globalconfig(root)
+        if gc:
+            try:
+                with open(gc, 'r', encoding='utf-8') as fh:
+                    gc_content = fh.read()
+                _add(f'{app_id}/globalConfig.json', gc_content, len(gc_content.encode('utf-8')))
+            except (OSError, UnicodeDecodeError):
+                pass
+
+        for dirpath, dirnames, filenames in os.walk(root):
+            dirnames[:] = [d for d in dirnames if d not in _SEED_PRUNE_DIRS]
+            for fn in filenames:
+                full = os.path.join(dirpath, fn)
+                rel = os.path.relpath(full, root).replace(os.sep, '/')
+                if not _seed_include(rel):
+                    continue
+                try:
+                    sz = os.path.getsize(full)
+                except OSError:
+                    continue
+                if sz > _SEED_MAX_FILE:
+                    skipped.append(rel)
+                    continue
+                try:
+                    with open(full, 'r', encoding='utf-8') as fh:
+                        content = fh.read()
+                except (OSError, UnicodeDecodeError):
+                    skipped.append(rel)
+                    continue
+                _add(f'{app_id}/{rel}', content, sz)
+        return json_response({'ok': True, 'appId': app_id, 'files': files,
+                              'truncated': state['truncated'], 'skipped': skipped[:50]})
 
     # --- AI provider settings (TrackMe-style) ------------------------------
     def _t_ai_config(self, store, args, session_key):
@@ -322,20 +583,17 @@ class BuilderHandler(PersistentServerConnectionApplication):
             return json_response({'error': 'call ucc_create_addon first'}, status=400)
         files = store.dump()
         if not files:
-            return json_response({'error': 'project is empty — author globalConfig.json first'}, status=400)
-        # Proxy to the Node build engine (ucc-gen + AppInspect). URL from app config.
-        payload = {
-            'appId': app_id,
-            'version': store.version(),
-            'files': files,
-            'maxIterations': int(args.get('maxIterations') or 4),
-            'includeWarnings': args.get('includeWarnings', True),
-            'package': package,
-        }
-        result, err = sidecar_call('/api/mcp/build_engine', payload, session_key)
-        if err:
-            return json_response({'error': f'build engine unavailable: {err}',
-                                  'hint': 'Set the sidecar URL in the app configuration.'}, status=502)
+            return json_response({'error': 'project is empty - author globalConfig.json first'}, status=400)
+        # Build natively in Splunk's python (ucc-gen + AppInspect, vendored under lib/).
+        # No nested LLM-fix loop here - the advisor agent reads the findings below and
+        # patches the source itself, then calls build_and_inspect again.
+        builder_build = _load_sibling('builder_build')
+        try:
+            result = builder_build.build_and_inspect(
+                files, app_id, version=store.version() or '1.0.0',
+                do_package=package, include_warnings=bool(args.get('includeWarnings', False)))
+        except Exception as e:  # noqa: BLE001
+            return json_response({'error': f'build failed: {e}'}, status=500)
         # Write any corrected files back into the project so Monaco reflects them.
         for f in (result.get('files') or []):
             safe = to_safe_project_path(app_id, f.get('path', ''))

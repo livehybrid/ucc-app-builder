@@ -51,8 +51,8 @@ const AppContainer = styled.div`
   /* Fill the mount point (#root), not the viewport. Standalone: html/body/#root are
      height:100% so this equals the viewport. Embedded in a Splunk dashboard the SPA is
      mounted at a vertical offset below the app chrome; ui_loader.js sizes #root to the
-     remaining visible height, so 100% keeps the whole shell — including the Monaco
-     editor — on-screen and scrollable. Using 100vh here pushed the editor below the
+     remaining visible height, so 100% keeps the whole shell - including the Monaco
+     editor - on-screen and scrollable. Using 100vh here pushed the editor below the
      fold where, with overflow:hidden, its lower content was unreachable. */
   height: 100%;
   display: flex;
@@ -367,6 +367,11 @@ function App() {
   const [wizardState, setWizardState] = useState<WizardState>(DEFAULT_WIZARD_STATE);
   const [vfs] = useState(() => new VirtualFileSystem());
   const [generated, setGenerated] = useState(false);
+  // Bumped whenever a DIFFERENT project is loaded (import zip/git/seed, resume saved app)
+  // so the AI chat remounts with a clean history - stale context from a previous project
+  // must not leak into the newly-loaded one.
+  const [chatSessionKey, setChatSessionKey] = useState(0);
+  const resetChat = useCallback(() => setChatSessionKey((k) => k + 1), []);
   const [appName, setAppName] = useState('splunk_app');
   const [developerMode, setDeveloperMode] = useState(false);
   const [gitHubSession, setGitHubSession] = useState<GitHubSession | undefined>(undefined);
@@ -411,8 +416,22 @@ function App() {
     const appId = appIdFromVfs();
     const files = vfs.getAllFiles().map((f) => ({ path: f.path, content: f.content }));
     if (!files.length) {
-      setMyAppsMsg('Nothing to save — build or import an add-on first.');
+      setMyAppsMsg('Nothing to save - build or import an add-on first.');
       return;
+    }
+    // My Apps is keyed by appId, so saving silently UPSERTS. If a DIFFERENT project is
+    // already saved under this id (e.g. both default to "splunk_app"), confirm before
+    // clobbering it - losing a saved add-on without warning is data loss.
+    const clash = savedApps.find((a) => a.appId === appId);
+    if (clash) {
+      const ok = window.confirm(
+        `An add-on "${appId}"${clash.name && clash.name !== appId ? ` ("${clash.name}")` : ''} ` +
+          `is already saved in My Apps (${clash.fileCount} files). Overwrite it with the current project?`
+      );
+      if (!ok) {
+        setMyAppsMsg('Save cancelled - rename this add-on (its appId) to keep both.');
+        return;
+      }
     }
     setMyAppsBusy(true);
     setMyAppsMsg(null);
@@ -425,7 +444,7 @@ function App() {
     } finally {
       setMyAppsBusy(false);
     }
-  }, [appIdFromVfs, vfs, appName, refreshApps]);
+  }, [appIdFromVfs, vfs, appName, refreshApps, savedApps]);
 
   const handleResumeApp = useCallback(
     async (appId: string) => {
@@ -444,13 +463,14 @@ function App() {
         setAppName(proj.name || appId);
         setShowMyApps(false);
         setMode('files');
+        resetChat();
       } catch (e) {
         setMyAppsMsg((e as Error).message);
       } finally {
         setMyAppsBusy(false);
       }
     },
-    [vfs]
+    [vfs, resetChat]
   );
 
   const handleDeleteApp = useCallback(
@@ -566,8 +586,9 @@ function App() {
       }));
       setGenerated(true);
       setMode('files');
+      resetChat();
     },
-    [vfs]
+    [vfs, resetChat]
   );
 
   const handleReset = useCallback(() => {
@@ -578,7 +599,7 @@ function App() {
 
   // Starting a NEW app while previous work is still in the (persisted) VFS:
   // offer a clean slate. Without this, earlier app attempts leak into the next
-  // session — the agent's list_files sees them and "helpfully" edits an old app.
+  // session - the agent's list_files sees them and "helpfully" edits an old app.
   const offerFreshStart = useCallback(() => {
     if (vfs.listAllFiles().length === 0) return;
     if (
@@ -631,7 +652,7 @@ function App() {
             appearance={mode === 'loop' ? 'primary' : 'default'}
             onClick={() => setMode('loop')}
             label="Validate (AppInspect)"
-            title="Build the current app with ucc-gen and run Splunk AppInspect on it, auto-fixing findings until clean. Works on anything in the editor — new, imported, or mid-edit."
+            title="Build the current app with ucc-gen and run Splunk AppInspect on it, auto-fixing findings until clean. Works on anything in the editor - new, imported, or mid-edit."
           />
           <Button
             appearance={mode === 'files' ? 'primary' : 'default'}
@@ -644,7 +665,7 @@ function App() {
             onClick={() => setShowPreview(true)}
             disabled={!generated}
             label="Preview UI"
-            title="Render globalConfig.json as the built app's UI — tabs, input forms and live validators — without running a build."
+            title="Render globalConfig.json as the built app's UI - tabs, input forms and live validators - without running a build."
           />
           <Button
             appearance={showEmulator ? 'primary' : 'default'}
@@ -691,7 +712,7 @@ function App() {
                   downloadBlob(blob, `${appName}-source.zip`);
                 }}
                 label="Download Source"
-                title="Normalized UCC source project (globalConfig.json + package/) — what you'd commit to git and build with ucc-gen."
+                title="Normalized UCC source project (globalConfig.json + package/) - what you'd commit to git and build with ucc-gen."
                 icon={<FileZip />}
               />
               <Button appearance="destructive" onClick={handleReset} label="Reset" />
@@ -938,7 +959,7 @@ function App() {
           </div>
           {savedApps.length === 0 ? (
             <p style={{ color: '#9b9ea3' }}>
-              {myAppsBusy ? 'Loading…' : 'No saved apps yet — build one and click “Save current app”.'}
+              {myAppsBusy ? 'Loading…' : 'No saved apps yet - build one and click “Save current app”.'}
             </p>
           ) : (
             <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
@@ -1007,6 +1028,7 @@ function App() {
               setShowGitHubModal(false);
               setGenerated(true);
               setMode('files');
+              resetChat();
             }}
             onRequestClose={() => {
               setShowGitHubModal(false);
@@ -1016,14 +1038,14 @@ function App() {
         </Modal.Body>
       </Modal>
 
-      {/* globalConfig UI Preview — see and test the generated UI pre-build */}
+      {/* globalConfig UI Preview - see and test the generated UI pre-build */}
       <Modal
         open={showPreview}
         onRequestClose={() => setShowPreview(false)}
         style={{ width: '92vw', maxWidth: '1100px' }}
         returnFocus={modalReturnRef}
       >
-        <Modal.Header title="UI Preview — as ucc-gen will build it" />
+        <Modal.Header title="UI Preview - as ucc-gen will build it" />
         <Modal.Body style={{ maxHeight: '78vh', overflowY: 'auto' }}>
           {showPreview && (
             <ConfigPreview
@@ -1040,6 +1062,7 @@ function App() {
       </Modal>
 
       <AIChatPanel
+        key={`chat-${chatSessionKey}`}
         open={chatOpen}
         onRequestClose={() => setChatOpen(false)}
         vfs={vfs}

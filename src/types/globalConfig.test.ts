@@ -102,7 +102,7 @@ describe('createGlobalConfig', () => {
     const tokenEntity = config.pages.inputs?.services?.[0].entity.find(
       (e) => e.field === 'api_token'
     );
-    expect(tokenEntity?.type).toBe('text'); // NOT 'password' — ucc-gen would reject that
+    expect(tokenEntity?.type).toBe('text'); // NOT 'password' - ucc-gen would reject that
     expect(tokenEntity?.encrypted).toBe(true);
   });
 

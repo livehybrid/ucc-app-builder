@@ -3,7 +3,7 @@
  *
  * The loop panel lets a user describe an add-on in plain English. To keep the
  * demo (and the e2e test) hermetic and free, we map the spec to a ComponentsConfig
- * with a small, deterministic keyword parser — NO LLM call required. The agentic
+ * with a small, deterministic keyword parser - NO LLM call required. The agentic
  * self-correction still happens downstream in the AppInspect loop. (An LLM-assisted
  * spec parser can be layered on later via the AI chat; this is the reproducible path.)
  */
@@ -100,7 +100,7 @@ export function parseSpec(spec: string): ParsedSpec {
   const metadata: AppMetadata = {
     name: appId,
     displayName: title,
-    description: text || `${title} — built with the UCC App Builder agentic loop.`,
+    description: text || `${title} - built with the UCC App Builder agentic loop.`,
     author: 'livehybrid',
     email: '',
     version: '1.0.0',

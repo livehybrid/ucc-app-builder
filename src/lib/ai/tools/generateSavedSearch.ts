@@ -25,7 +25,7 @@ function appIdOf(vfs: { getAllFiles(): Array<{ path: string; content: string }> 
 export const generateSavedSearch: Tool = {
   name: 'generate_savedsearch',
   description:
-    'Generate a savedsearches.conf entry — a report or scheduled alert. Args: name, search (SPL); ' +
+    'Generate a savedsearches.conf entry - a report or scheduled alert. Args: name, search (SPL); ' +
     'optional description, earliest, latest, cronSchedule (schedules it), alert={condition, ' +
     'threshold, severity 1-6} for alerting. Ground SPL in real indexes. Appends to ' +
     'default/savedsearches.conf.',

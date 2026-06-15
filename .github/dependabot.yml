@@ -16,12 +16,32 @@ updates:
           - "minor"
           - "patch"
 
-  # GitHub Actions
+  # GitHub Actions (action `uses:` pins across all workflows)
   - package-ecosystem: "github-actions"
     directory: "/"
     schedule:
       interval: "weekly"
       day: "monday"
+    open-pull-requests-limit: 10
     labels:
       - "ci"
+      - "automated"
+    groups:
+      actions:
+        update-types:
+          - "minor"
+          - "patch"
+
+  # Pinned Splunk dev toolchain for the deterministic loop-smoke gate
+  # (.github/dev-requirements.txt). Bumps arrive as PRs that the loop-smoke job
+  # validates (must still reach AppInspect-CLEAN) before they can be merged.
+  - package-ecosystem: "pip"
+    directory: "/.github"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+    open-pull-requests-limit: 10
+    labels:
+      - "ci"
+      - "dependencies"
       - "automated"

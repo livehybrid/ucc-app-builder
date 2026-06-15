@@ -1,14 +1,14 @@
 /**
- * Expert Expansion — turn a one-line request into a complete, reviewable UCC add-on spec.
+ * Expert Expansion - turn a one-line request into a complete, reviewable UCC add-on spec.
  *
  * Agents (LLMs) left to their own devices produce thin add-ons: one input, one field, no
- * auth, no proxy, no CIM. This stage runs BEFORE the build and forces depth — the way a
- * senior Splunk TA developer would scope it — then hands the user an editable spec to
+ * auth, no proxy, no CIM. This stage runs BEFORE the build and forces depth - the way a
+ * senior Splunk TA developer would scope it - then hands the user an editable spec to
  * approve (the review gate) so the build is grounded in something concrete and correct.
  *
  * This is UCC-tuned (data-collection add-ons / TAs), not dashboard-app generation: the
- * "minimums" are about a COMPLETE add-on — authenticated, proxy-aware, CIM-mapped,
- * checkpointed — not "8 panels". The spec maps directly onto what the agent then authors
+ * "minimums" are about a COMPLETE add-on - authenticated, proxy-aware, CIM-mapped,
+ * checkpointed - not "8 panels". The spec maps directly onto what the agent then authors
  * in globalConfig.json.
  *
  * Shared by BOTH agent paths: the browser expands + reviews here, then seeds whichever
@@ -85,7 +85,7 @@ export interface UccSpec {
   inputs: UccSpecInput[];
   /** the operational questions this add-on lets you answer once the data is onboarded */
   questions?: string[];
-  /** honest gaps — e.g. "schema not grounded; sourcetype is a best guess" */
+  /** honest gaps - e.g. "schema not grounded; sourcetype is a best guess" */
   gaps?: string[];
   /** true when fields/sourcetypes were grounded against a live Splunk instance */
   grounded?: boolean;
@@ -97,30 +97,30 @@ export interface ExpansionGrounding {
   sourcetypes?: string[];
 }
 
-const MINIMUMS = `MINIMUM COMPLETENESS — a real add-on, never a skeleton:
+const MINIMUMS = `MINIMUM COMPLETENESS - a real add-on, never a skeleton:
 - At least ONE fully-specified data input (more if the source exposes distinct data sets).
 - An account/credential definition with the correct auth type (api_key / bearer_token /
-  basic / oauth2) — secrets MUST be marked encrypted. Use "none" ONLY for genuinely
+  basic / oauth2) - secrets MUST be marked encrypted. Use "none" ONLY for genuinely
   unauthenticated public sources.
 - Proxy support (proxy=true) and a logging-level setting (loggingLevel=true) UNLESS the
   source is local-only; default both to true for any network/API collection.
 - An SSL-verify toggle for any HTTPS collection.
 - For every input: a descriptive sourcetype (vendor:product:dataset form), a poll interval,
   a checkpoint flag for time-series/incremental sources, and a CIM data model mapping when
-  the data clearly fits one (Web, Authentication, Network_Traffic, Change, etc.) — else "".`;
+  the data clearly fits one (Web, Authentication, Network_Traffic, Change, etc.) - else "".`;
 
 const DIMENSIONS = `THINK LIKE THE ENGINEER WHO WILL RUN THIS ADD-ON. Before writing the spec,
 list the operational questions the onboarded data must answer (questions[]). Cover, where
 the source allows: current state, trend over time, breakdown by a dimension (host/user/
 endpoint/region), comparison to baseline, anomalies, and what action the data drives. Each
-question should be answerable from a field you include — if a question needs a field the
+question should be answerable from a field you include - if a question needs a field the
 source does not expose, record it under gaps[] rather than inventing the field.`;
 
 /** The UCC-tuned expansion system prompt. Strict JSON output matching {@link UccSpec}. */
 export function expansionSystemPrompt(): string {
   return `You are a senior Splunk Technology Add-on (TA) developer with deep UCC-framework
 experience. You receive a short request and expand it into a COMPLETE, expert-level
-specification for a data-collection add-on that a real team would deploy — authenticated,
+specification for a data-collection add-on that a real team would deploy - authenticated,
 proxy-aware, checkpointed, and CIM-mapped where it fits.
 
 ${MINIMUMS}
@@ -130,7 +130,7 @@ ${DIMENSIONS}
 GROUNDING:
 - When AVAILABLE INDEXES / SOURCETYPES are provided, reference REAL ones; set grounded=true.
 - Never invent field names you cannot justify from the source; list assumptions in gaps[].
-- Name everything specifically — snake_case keys, vendor:product:dataset sourcetypes,
+- Name everything specifically - snake_case keys, vendor:product:dataset sourcetypes,
   TA_<vendor>_<product> appId. No "input1" / "field_a" placeholders.
 
 OUTPUT: return ONLY a single JSON object (no markdown fences, no prose) with EXACTLY this
@@ -175,7 +175,7 @@ shape:
 }
 
 KEEP IT FOCUSED so the JSON is not truncated: at most ~6 inputs and ~8 fields per input,
-short help strings, ≤8 questions. Completeness over volume — cover the real data sets, not
+short help strings, ≤8 questions. Completeness over volume - cover the real data sets, not
 every conceivable option.
 
 BEFORE RETURNING, verify: at least one complete input; account auth set with secrets
@@ -192,7 +192,7 @@ export function expansionUserPrompt(request: string, grounding?: ExpansionGround
   if (st.length) parts.push(`AVAILABLE SOURCETYPES: ${st.slice(0, 80).join(', ')}`);
   if (!idx.length && !st.length) {
     parts.push(
-      'No live Splunk grounding available — choose sensible sourcetypes/index and set grounded=false; note in gaps[] that the schema is not grounded.'
+      'No live Splunk grounding available - choose sensible sourcetypes/index and set grounded=false; note in gaps[] that the schema is not grounded.'
     );
   }
   return parts.join('\n\n');
@@ -340,10 +340,10 @@ export function parseSpec(text: string): UccSpec {
   };
 }
 
-/** Quick completeness warnings for the review gate (non-blocking — guidance, not errors). */
+/** Quick completeness warnings for the review gate (non-blocking - guidance, not errors). */
 export function specWarnings(spec: UccSpec): string[] {
   const w: string[] = [];
-  if (!spec.inputs.length) w.push('No inputs defined — an add-on needs at least one.');
+  if (!spec.inputs.length) w.push('No inputs defined - an add-on needs at least one.');
   if (spec.account.authType !== 'none' && spec.account.fields.length === 0) {
     w.push(`Auth is "${spec.account.authType}" but no credential fields are defined.`);
   }
@@ -356,7 +356,7 @@ export function specWarnings(spec: UccSpec): string[] {
     spec.account.authType !== 'none' &&
     !spec.account.fields.some((f) => f.encrypted || f.type === 'password')
   ) {
-    w.push('No credential field is marked encrypted — secrets should be encrypted.');
+    w.push('No credential field is marked encrypted - secrets should be encrypted.');
   }
   return w;
 }

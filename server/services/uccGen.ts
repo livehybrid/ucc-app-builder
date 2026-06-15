@@ -1,6 +1,7 @@
 import { spawn } from 'child_process';
 import path from 'path';
 import fs from 'fs/promises';
+import { appManifestFromGlobalConfig } from '../../src/lib/generator.js';
 
 /** ELF e_machine value for AArch64 (ARM64). */
 const EM_AARCH64 = 0xb7;
@@ -218,11 +219,49 @@ export class UCCGenService {
   /**
    * Build the UCC app
    */
+  /**
+   * DETERMINISTIC GUARD: ucc-gen REQUIRES package/app.manifest but does NOT generate it,
+   * so a project that arrived without one (or with it stripped) makes both build and
+   * package fail with "No app.manifest found". Generate it from globalConfig.json metadata
+   * before running ucc-gen — the same safety net the agent build loop applies, here on the
+   * direct build/package path too. Idempotent: a no-op when the manifest already exists.
+   */
+  private async ensureManifest(workDir: string, onLog: (log: string) => void): Promise<void> {
+    const pkgDir = path.join(workDir, 'package');
+    const manifestPath = path.join(pkgDir, 'app.manifest');
+    try {
+      await fs.access(manifestPath);
+      return; // already present
+    } catch {
+      /* generate below */
+    }
+    let gcRaw: string | undefined;
+    for (const cand of [path.join(pkgDir, 'globalConfig.json'), path.join(workDir, 'globalConfig.json')]) {
+      try {
+        gcRaw = await fs.readFile(cand, 'utf-8');
+        break;
+      } catch {
+        /* try next */
+      }
+    }
+    if (!gcRaw) return; // no globalConfig — let ucc-gen surface its own error
+    try {
+      const appId = JSON.parse(gcRaw)?.meta?.name || path.basename(workDir);
+      const manifest = appManifestFromGlobalConfig(gcRaw, appId);
+      await fs.mkdir(pkgDir, { recursive: true });
+      await fs.writeFile(manifestPath, JSON.stringify(manifest, null, 2), 'utf-8');
+      onLog('Generated required package/app.manifest from globalConfig.json (ucc-gen does not create it).');
+    } catch (e) {
+      onLog(`Could not auto-generate app.manifest: ${(e as Error).message}`);
+    }
+  }
+
   async build(
     workDir: string,
     onLog: (log: string) => void,
     version?: string
   ): Promise<string> {
+    await this.ensureManifest(workDir, onLog);
     return new Promise((resolve, reject) => {
       const outputDir = path.join(workDir, 'output');
       const args = ['build', '--source', path.join(workDir, 'package'), '--output', outputDir];

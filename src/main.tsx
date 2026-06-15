@@ -6,7 +6,7 @@ import App from './App';
 import './index.css';
 
 // When embedded in the native Splunk app, load Monaco from the vendored copy (the app
-// page loader sets __UCC_MONACO_VS__) instead of the public CDN — works offline / CSP.
+// page loader sets __UCC_MONACO_VS__) instead of the public CDN - works offline / CSP.
 const _vs = (window as unknown as { __UCC_MONACO_VS__?: string }).__UCC_MONACO_VS__;
 if (_vs) {
   loader.config({ paths: { vs: _vs } });

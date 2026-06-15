@@ -14,7 +14,7 @@
  *   get_stanza_spec("inputs.conf", "script://...")
  * and get back the list of valid settings + their docs + defaults. This
  * replaces embeddings-based RAG for the core "what settings exist?" question,
- * which is the 80% case — fully self-hostable, zero external services.
+ * which is the 80% case - fully self-hostable, zero external services.
  */
 
 export interface SpecSetting {
@@ -30,7 +30,7 @@ export interface SpecSetting {
 export interface SpecStanza {
   /** Stanza header, verbatim, without the brackets. */
   name: string;
-  /** Description — the `*` lines that appear above or immediately under the stanza header. */
+  /** Description - the `*` lines that appear above or immediately under the stanza header. */
   doc: string;
   settings: SpecSetting[];
 }
@@ -47,7 +47,7 @@ export function parseConfSpec(text: string): ParsedSpec {
   const stanzas: SpecStanza[] = [];
 
   let i = 0;
-  // 1. Preamble — `#` comments before any stanza.
+  // 1. Preamble - `#` comments before any stanza.
   while (i < lines.length && !lines[i].trimStart().startsWith('[')) {
     preambleLines.push(lines[i]);
     i++;
@@ -85,7 +85,7 @@ export function parseConfSpec(text: string): ParsedSpec {
     }
     stanza.doc = docLines.join('\n').trim();
 
-    // 3. Settings — key = value; docs as `*` lines *below* the setting.
+    // 3. Settings - key = value; docs as `*` lines *below* the setting.
     while (i < lines.length) {
       const l = lines[i];
       const trimmed = l.trim();
@@ -168,7 +168,7 @@ export class ConfSpecIndex {
     const spec = this.files.get(normaliseConfName(confName));
     if (!spec) return null;
     // Exact first; then glob-like pattern (Splunk spec stanzas are often like
-    // `script://<path>` — the agent might ask for "script" so we fall back to
+    // `script://<path>` - the agent might ask for "script" so we fall back to
     // a prefix/substring match).
     const exact = spec.stanzas.find((s) => s.name === stanzaName);
     if (exact) return exact;

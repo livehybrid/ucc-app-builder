@@ -67,7 +67,7 @@ export function buildDashboardDefinition(spec: DashboardSpec): Record<string, un
     const vizId = `viz_${i}`;
     dataSources[dsId] = {
       type: 'ds.search',
-      name: `${p.title || `Panel ${i + 1}`} — search`,
+      name: `${p.title || `Panel ${i + 1}`} - search`,
       options: {
         query: p.spl,
         queryParameters: { earliest: p.earliest || '-24h@h', latest: p.latest || 'now' },

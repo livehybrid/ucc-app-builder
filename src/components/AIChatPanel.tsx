@@ -6,6 +6,7 @@ import { fetchWithRetry } from '../lib/ai/retry';
 import { type UccSpec, renderBuildInstruction } from '../lib/ai/expansion';
 import { expandRequest, fetchGrounding } from '../lib/ai/expandClient';
 import { SpecReviewGate } from './SpecReviewGate';
+import { RunHistory } from './RunHistory';
 import type { VirtualFileSystem } from '../lib/vfs';
 import styled from 'styled-components';
 import SidePanel from '@splunk/react-ui/SidePanel';
@@ -145,7 +146,7 @@ function renderUsage(
 ): string {
   const fmt = (n: number) => n.toLocaleString('en-US');
   const total = usage.promptTokens + usage.completionTokens;
-  let line = `Tokens — ↑ ${fmt(usage.promptTokens)} in · ↓ ${fmt(usage.completionTokens)} out · ${fmt(total)} total`;
+  let line = `Tokens - ↑ ${fmt(usage.promptTokens)} in · ↓ ${fmt(usage.completionTokens)} out · ${fmt(total)} total`;
   const pricing = models.find((m) => m.id === modelId)?.pricing;
   if (pricing) {
     const cost = usage.promptTokens * pricing.prompt + usage.completionTokens * pricing.completion;
@@ -160,7 +161,7 @@ function renderUsage(
 
 const SettingsSection = styled.div`
   /* Settings takes over the whole panel body (the chat is hidden while it is
-     open) — a half-overlay invited users to keep chatting with settings up.
+     open) - a half-overlay invited users to keep chatting with settings up.
      Scrolls internally; an explicit Done button in the footer returns to chat. */
   flex: 1;
   overflow-y: auto;
@@ -532,6 +533,14 @@ interface AIConfig {
     askTools?: string[];
     mcpGroundingAuto?: boolean;
   };
+  // Per-function models from the Splunk Configuration → AI Provider tab (injected by the
+  // REST proxy as X-Chat/Build/Completion-Model and surfaced here). In Splunk mode these,
+  // not the SPA's picker, are the source of truth.
+  configuredModels?: {
+    chat?: string;
+    build?: string;
+    completion?: string;
+  };
 }
 
 /** Tool-approval policy, mirrored from server/services/toolPolicy.ts. */
@@ -553,7 +562,7 @@ const CLIENT_ASK_TOOLS = [
 
 const MAX_ITER_STORAGE = 'splunk-app-builder-ai-max-iterations';
 const MAX_ITER_MIN = 1;
-const MAX_ITER_MAX = 20;
+const MAX_ITER_MAX = 100;
 
 const USE_SPLUNK_AGENT_STORAGE = 'splunk-app-builder-use-splunk-agent';
 
@@ -599,16 +608,16 @@ export function AIChatPanel({
   const [selectedModel, setSelectedModel] = useState(() => {
     const saved = localStorage.getItem(MODEL_STORAGE);
     // Migration: the old default 'moonshotai/kimi-k2' was MISLABELLED as K2.6 in
-    // the picker — anyone carrying it actually wanted (and saw) K2.6.
+    // the picker - anyone carrying it actually wanted (and saw) K2.6.
     if (!saved || saved === 'moonshotai/kimi-k2') return 'moonshotai/kimi-k2.6';
     return saved;
   });
   const [aiConfig, setAiConfig] = useState<AIConfig | null>(null);
   // Max agent iterations. Seeded from the server's env-configurable default
-  // (/api/ai/config) unless the user has overridden it locally. Clamped [1,20].
+  // (/api/ai/config) unless the user has overridden it locally. Clamped [1,100].
   const [maxIterations, setMaxIterations] = useState<number>(() => {
     const saved = Number(localStorage.getItem(MAX_ITER_STORAGE));
-    return Number.isFinite(saved) && saved >= MAX_ITER_MIN && saved <= MAX_ITER_MAX ? saved : 12;
+    return Number.isFinite(saved) && saved >= MAX_ITER_MIN && saved <= MAX_ITER_MAX ? saved : 30;
   });
 
   const saveMaxIterations = (value: number) => {
@@ -631,8 +640,8 @@ export function AIChatPanel({
   };
   // True when the chat is driven by the Splunk Agent SDK. In this mode the OpenRouter-only
   // settings (API key, model picker, client-side tool-approval policy, capability flags)
-  // don't apply — provider/model/key/temperature come from the Configuration → AI Provider
-  // tab and tools run server-side — so the UI hides them.
+  // don't apply - provider/model/key/temperature come from the Configuration → AI Provider
+  // tab and tools run server-side - so the UI hides them.
   const splunkMode = splunkAgent && useSplunkAgent;
 
   // Expert Expansion + review gate. `pendingSpec` non-null shows the gate (the chat body is
@@ -689,6 +698,8 @@ export function AIChatPanel({
   const [useCustomModel, setUseCustomModel] = useState(false);
   const [customModelId, setCustomModelId] = useState('');
   const [showSettings, setShowSettings] = useState(false);
+  // Durable run-history viewer (Splunk Agent SDK traces). Splunk-app only.
+  const [showHistory, setShowHistory] = useState(false);
 
   // Chat history - initialized from localStorage
   const [messages, setMessages] = useState<ChatMessage[]>(() => {
@@ -745,6 +756,10 @@ export function AIChatPanel({
   // Abort handle for the in-flight agent run. Aborting the fetch closes the SSE
   // stream, which the server detects and cancels the run (and its LLM spend).
   const runAbortRef = useRef<AbortController | null>(null);
+  // Job id of an in-flight Splunk-agent (splunklib.ai) poll loop. In Splunk mode the
+  // detached runner keeps billing the LLM even after we abort the local poll fetch, so
+  // Stop must additionally POST /agent_cancel to kill the runner's process group.
+  const activeSplunkJobRef = useRef<string | null>(null);
   // Args of in-flight server tool calls, keyed by call id, so the matching
   // tool_result can be rendered with file context (e.g. read_file path →
   // syntax-highlighting language).
@@ -889,7 +904,7 @@ export function AIChatPanel({
     setOfferContinue(false);
     localStorage.removeItem(CHAT_HISTORY_STORAGE);
     // Rotate the agent session id too: the server keeps per-session memory
-    // (todos, decisions, approvals) keyed by it — "clear chat" means a genuinely
+    // (todos, decisions, approvals) keyed by it - "clear chat" means a genuinely
     // fresh agent, not the same memory under an empty transcript.
     window.localStorage.removeItem(AGENT_SESSION_KEY);
     sessionApprovedRef.current = new Set();
@@ -1109,7 +1124,7 @@ export function AIChatPanel({
   };
 
   /** Render one progress event from the Splunk Agent SDK (splunklib.ai) job. The SDK
-   *  middleware emits: `assistant` (a model reply with text — one per turn, so each is a
+   *  middleware emits: `assistant` (a model reply with text - one per turn, so each is a
    *  fresh bubble), `tool_call` (name + args), `tool_result` (content), and a terminal
    *  `done` (answer + the project files to sync to the VFS) / `error`. */
   const handleSplunkEvent = (ev: Record<string, unknown>) => {
@@ -1123,16 +1138,19 @@ export function AIChatPanel({
     }
     if (type === 'tool_call') {
       const id = String(ev.id || '');
-      const args = ev.args;
+      const args = ev.args as Record<string, unknown> | undefined;
       if (id && args && typeof args === 'object') {
-        toolCallArgsRef.current[id] = args as Record<string, unknown>;
+        toolCallArgsRef.current[id] = args;
       }
       const toolName = String(ev.name || '');
-      if (toolName === 'create_addon' || toolName === 'build_and_inspect') {
-        // Surface the headline build steps so the chat reads as a narrative.
+      if (toolName) {
+        // Surface EVERY tool call as a step so the run reads as a transparent narrative and
+        // the step count matches what the user sees (previously only create_addon /
+        // build_and_inspect showed, hiding the write_file / read_file / list_project steps).
+        const path = typeof args?.path === 'string' ? ` ${args.path}` : '';
         setMessages((prev) => [
           ...prev,
-          { role: 'system', content: `🔧 ${toolName}…`, timestamp: new Date() },
+          { role: 'system', content: `🔧 ${toolName}${path}`, timestamp: new Date() },
         ]);
       }
       return;
@@ -1160,24 +1178,71 @@ export function AIChatPanel({
       return;
     }
     if (type === 'error') {
+      // Sync any partial project the agent wrote before failing (e.g. it ran out of its
+      // step budget mid-task) into the VFS, so a subsequent "Continue" resumes from the
+      // real state instead of re-syncing the stale VFS over the agent's work.
+      if (Array.isArray(ev.files)) {
+        applyServerFiles(ev.files as Array<{ path: string; content: string }>);
+      }
       throw new Error(String(ev.error || 'Splunk agent error'));
     }
   };
 
   /** Drive the Splunk Agent SDK (splunklib.ai) chat: start a server-side job, then poll
    *  for events. Splunk persistent REST handlers can't stream and the embedded SPA sits
-   *  behind a buffering proxy, so polling is how progress arrives incrementally — each
+   *  behind a buffering proxy, so polling is how progress arrives incrementally - each
    *  poll is its own round-trip, filling the transcript step by step. */
   const splunkAgentLoop = async (
     messages: Array<{ role: string; content: string }>
   ) => {
+    // Sync the SPA's current VFS into the agent's server-side KV project BEFORE the run, so
+    // the agent works on EXACTLY what the user is looking at. We ALWAYS sync - including when
+    // the VFS is empty (a new / "start fresh" app), which clears the KV project. Otherwise a
+    // previously-built project lingers server-side and the agent reports "a project is already
+    // loaded" and extends the old app instead of starting fresh. When the VFS has content the
+    // agent extends it (imported / wizard / seeded) rather than create_addon-ing a fresh one
+    // and clobbering it. The agent's done-event syncs KV back to the VFS.
+    try {
+      const vfsFiles = vfs.getAllFiles();
+      let appId = '';
+      const gc = vfsFiles.find((f) => f.path.endsWith('globalConfig.json'));
+      if (gc) {
+        try {
+          appId = String(JSON.parse(gc.content)?.meta?.name || '');
+        } catch {
+          /* fall through to path-derived id */
+        }
+      }
+      if (!appId && vfsFiles.length > 0) {
+        appId = vfsFiles[0].path.replace(/^\/+/, '').split('/')[0] || '';
+      }
+      // An empty VFS → appId '' + files [] → the server clears the project (fresh start).
+      await splunkFetch('/sync_project', {
+        method: 'POST',
+        body: JSON.stringify({
+          appId,
+          version: '1.0.0',
+          // Strip leading slashes - the server path-confinement rejects absolute paths.
+          files: vfsFiles.map((f) => ({ path: f.path.replace(/^\/+/, ''), content: f.content })),
+        }),
+        signal: runAbortRef.current?.signal,
+      });
+    } catch {
+      /* non-fatal - the agent can still create_addon from scratch */
+    }
+
     // In Splunk-AI mode the Configuration → AI Provider tab is the single source of
     // truth for provider + model + key + temperature (the Splunk-native way). We do NOT
     // send a model from the SPA picker (its list is OpenRouter IDs, which wouldn't be
     // valid for a non-OpenRouter provider); only the runtime step budget is passed.
+    // splunklib.ai's step limit counts TOTAL MESSAGES, not agent actions - and each tool
+    // round adds ~2 (the assistant turn + the tool result). So a user-facing budget of N
+    // "iterations" needs ~2N+headroom messages to actually allow N tool calls. Without this
+    // the agent hit "step limit (20)" after only ~9 tool calls. (system + user = 2 seed.)
+    const messageBudget = maxIterations * 2 + 6;
     const startRes = await splunkFetch('/agent_start', {
       method: 'POST',
-      body: JSON.stringify({ messages, max_steps: maxIterations }),
+      body: JSON.stringify({ messages, max_steps: messageBudget }),
       signal: runAbortRef.current?.signal,
     });
     if (!startRes) throw new Error('Splunk Agent SDK backend is not available.');
@@ -1187,6 +1252,8 @@ export function AIChatPanel({
     }
     const jobId = String(startBody.job_id || '');
     if (!jobId) throw new Error('agent_start returned no job id.');
+    // Track the live job so stopRun() can cancel the detached runner server-side.
+    activeSplunkJobRef.current = jobId;
 
     let cursor = 0;
     let running = true;
@@ -1213,6 +1280,7 @@ export function AIChatPanel({
         handleSplunkEvent(ev);
       }
     }
+    activeSplunkJobRef.current = null;
   };
 
   const streamServerAgentLoop = async (payload: {
@@ -1390,7 +1458,7 @@ export function AIChatPanel({
           ...prev,
           {
             role: 'system',
-            content: `Approval for "${String(parsed.tool || 'tool')}" timed out — the agent will proceed without it.`,
+            content: `Approval for "${String(parsed.tool || 'tool')}" timed out - the agent will proceed without it.`,
             timestamp: new Date(),
           },
         ]);
@@ -1488,9 +1556,15 @@ export function AIChatPanel({
     setError(null);
     try {
       const grounding = await fetchGrounding();
+      // In Splunk mode the SPA's picker default is the engine's default (a reasoning
+      // model like kimi-k2.6 whose reasoning can starve `content` → "empty response").
+      // Expansion is structured extraction: use the CONFIGURED chat model (sonnet, etc.)
+      // from the Configuration → AI Provider tab instead.
+      const expansionModel =
+        (splunkMode && aiConfig?.configuredModels?.chat) || activeModel;
       const spec = await expandRequest({
         request: text,
-        model: activeModel,
+        model: expansionModel,
         serverManaged,
         apiKey,
         grounding,
@@ -1509,7 +1583,7 @@ export function AIChatPanel({
     setPendingSpec(null);
     setInputValue('');
     const n = spec.inputs.length;
-    const summary = `▶ Building approved spec: **${spec.name}** (\`${spec.appId}\`) — ${n} input${n === 1 ? '' : 's'}, auth \`${spec.account.authType}\`.`;
+    const summary = `▶ Building approved spec: **${spec.name}** (\`${spec.appId}\`) - ${n} input${n === 1 ? '' : 's'}, auth \`${spec.account.authType}\`.`;
     void sendMessage(renderBuildInstruction(spec), summary);
   };
 
@@ -1520,13 +1594,13 @@ export function AIChatPanel({
     const isServerManaged = aiConfig?.serverManaged ?? false;
 
     // When embedded in Splunk, every /api call is forwarded by a persistent REST
-    // proxy that must return its whole payload at once — it cannot stream SSE
+    // proxy that must return its whole payload at once - it cannot stream SSE
     // incrementally. The server-managed SSE loop (streamServerAgentLoop) therefore
     // arrives buffered: one burst at completion, with the duplicate-message artefacts
     // that come from re-flushing accumulated deltas. So when proxied we drive the
     // agent loop CLIENT-side instead: one buffered round-trip per turn, with each
     // assistant message and tool result rendered as it happens (genuine step-by-step
-    // progress). Server-managed credentials still apply — the client loop posts to
+    // progress). Server-managed credentials still apply - the client loop posts to
     // /api/ai/chat and the proxy injects the key, so no client API key is needed.
     const isProxied = (window as unknown as { __UCC_PROXIED__?: boolean }).__UCC_PROXIED__ === true;
     const useServerStream = isServerManaged && !isProxied;
@@ -1922,17 +1996,48 @@ export function AIChatPanel({
           { role: 'system', content: '⏹ Stopped by user.', timestamp: new Date() } as ChatMessage,
         ]);
       } else {
-        setError((err as Error).message);
+        const msg = (err as Error).message || '';
+        // Running out of the step budget mid-task is not a hard failure - the Splunk
+        // agent (splunklib.ai) raises StepsLimitExceededException, which would otherwise
+        // surface as a dead-end red banner with no way forward. Treat it as a resumable
+        // stop: offer the same "▶ Continue" affordance the engine path gets so the user
+        // can pick up from where the agent left off (it re-reads the KV project state).
+        if (/steps?\s*limit|StepsLimitExceeded|reached max(?:imum)? (?:tool )?iterations/i.test(msg)) {
+          setOfferContinue(true);
+          setMessages((prev) => [
+            ...prev,
+            {
+              role: 'system',
+              content: `⚠️ Reached the step limit (${maxIterations}) before finishing. Click "▶ Continue" below to resume from where it stopped, or raise the limit in Settings → Agent.`,
+              timestamp: new Date(),
+            } as ChatMessage,
+          ]);
+        } else {
+          setError(msg);
+        }
       }
     } finally {
       runAbortRef.current = null;
+      activeSplunkJobRef.current = null;
       setIsLoading(false);
     }
   };
 
-  /** Stop button: abort the in-flight run (server cancels on disconnect). */
+  /** Stop button: abort the in-flight run. For the OpenRouter/server route, aborting
+   * the fetch closes the SSE stream and the server cancels on disconnect. For the
+   * Splunk-agent route the runner is detached (it keeps billing the LLM after the poll
+   * fetch aborts), so we also POST /agent_cancel to kill its process group. */
   const stopRun = () => {
     runAbortRef.current?.abort();
+    const jobId = activeSplunkJobRef.current;
+    if (jobId && splunkFetch) {
+      activeSplunkJobRef.current = null;
+      // Fire-and-forget - the poll loop's AbortError already ends the run in the UI.
+      splunkFetch('/agent_cancel', {
+        method: 'POST',
+        body: JSON.stringify({ job_id: jobId }),
+      })?.catch(() => {});
+    }
   };
 
   const handleKeyDown = (e: React.KeyboardEvent) => {
@@ -1947,7 +2052,7 @@ export function AIChatPanel({
       <SidePanel
         open={open}
         dockPosition="right"
-        // Only close on Esc or the explicit × button — clickAway also fires when
+        // Only close on Esc or the explicit × button - clickAway also fires when
         // focus returns after a browser tab switch, which silently shut the panel.
         onRequestClose={(data: { reason?: string }) => {
           if (data?.reason !== 'clickAway') onRequestClose();
@@ -1961,6 +2066,14 @@ export function AIChatPanel({
               AI Assistant
             </Heading>
             <div style={{ display: 'flex', gap: 8 }}>
+              {splunkMode && (
+                <Button
+                  appearance={showHistory ? 'primary' : 'default'}
+                  onClick={() => setShowHistory(true)}
+                  label="🕘 History"
+                  title="Review past Splunk Agent SDK runs (durable traces)."
+                />
+              )}
               <Button
                 appearance={showSettings ? 'primary' : 'default'}
                 onClick={() => setShowSettings(!showSettings)}
@@ -1969,6 +2082,8 @@ export function AIChatPanel({
               <Button appearance="default" onClick={onRequestClose} label="×" />
             </div>
           </PanelHeader>
+
+          <RunHistory open={showHistory} onClose={() => setShowHistory(false)} />
 
           {pendingSpec ? (
             <SpecReviewGate
@@ -2005,7 +2120,7 @@ export function AIChatPanel({
                 )}
                 {aiConfig?.serverManaged ? (
                   <Message type="success" style={{ marginBottom: 12 }}>
-                    AI is server-managed — no API key needed.
+                    AI is server-managed - no API key needed.
                   </Message>
                 ) : (
                   <>
@@ -2036,7 +2151,7 @@ export function AIChatPanel({
                   labelPosition="top"
                   help={
                     remoteModels.length
-                      ? `Live list of ${remoteModels.length} tool-calling models from OpenRouter — or use a custom model ID.`
+                      ? `Live list of ${remoteModels.length} tool-calling models from OpenRouter - or use a custom model ID.`
                       : 'Select a model or use a custom model ID from OpenRouter.'
                   }
                   style={{ marginTop: 16 }}
@@ -2073,7 +2188,7 @@ export function AIChatPanel({
                         key={m.id}
                         label={
                           m.contextLength
-                            ? `${m.label} — ${Math.round(m.contextLength / 1000)}k ctx`
+                            ? `${m.label} - ${Math.round(m.contextLength / 1000)}k ctx`
                             : `${m.label} (${m.provider})`
                         }
                         value={m.id}
@@ -2158,7 +2273,7 @@ export function AIChatPanel({
                 <ControlGroup
                   label="Max agent iterations"
                   labelPosition="top"
-                  help={`How many planner/executor turns the agent may take before stopping (${MAX_ITER_MIN}–${MAX_ITER_MAX}). Lower values cap OpenRouter spend; the no-progress breaker also stops repeated failing actions early.`}
+                  help={`How many planner/executor turns the agent may take before stopping (${MAX_ITER_MIN}-${MAX_ITER_MAX}). Lower values cap OpenRouter spend; the no-progress breaker also stops repeated failing actions early.`}
                   style={{ marginTop: 16 }}
                 >
                   <Text
@@ -2172,7 +2287,7 @@ export function AIChatPanel({
                   />
                 </ControlGroup>
                 <p style={{ fontSize: '0.85em', color: '#9b9ea3', marginTop: 4 }}>
-                  Default {aiConfig?.agent?.maxIterations ?? 12}
+                  Default {aiConfig?.agent?.maxIterations ?? 30}
                   {aiConfig?.agent?.noProgressLimit
                     ? ` · no-progress breaker at ${aiConfig.agent.noProgressLimit} repeats`
                     : ''}
@@ -2237,7 +2352,7 @@ export function AIChatPanel({
                 <Button
                   appearance="primary"
                   onClick={() => setShowSettings(false)}
-                  label="Done — back to chat"
+                  label="Done - back to chat"
                 />
               </PanelFooter>
             </>
@@ -2299,7 +2414,7 @@ export function AIChatPanel({
                       <MessageBubble
                         key={i}
                         $role={msg.role}
-                        // File viewers need real width — stretch their bubble.
+                        // File viewers need real width - stretch their bubble.
                         style={msg.name === 'read_file' ? { width: '90%' } : undefined}
                       >
                         {msg.role === 'assistant' ? (

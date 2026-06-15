@@ -33,15 +33,15 @@ export const ALLOWED_PATH_PREFIXES = ['package/', '/package/'];
 // package/. `ucc-gen` reads globalConfig.json from the source root; blocking it
 // forces the agent to misfile it into package/ or loop on a write error.
 //
-// NOTE: `globalConfig.json` is the ONLY root file the builder currently honours —
+// NOTE: `globalConfig.json` is the ONLY root file the builder currently honours -
 // the generator writes nothing else at root, and the build path-mapping
 // (`server/services/agentLoop.ts` mapVfsPathToDisk) + the exporter only carry
 // `globalConfig.json` and `package/...` to disk; any other root file is silently
 // dropped. ucc-gen DOES additionally support a few optional root files we could
-// add in future — most notably `additional_packaging.py` (a build hook), plus
+// add in future - most notably `additional_packaging.py` (a build hook), plus
 // `globalConfig.yaml` and `.uccignore`. We deliberately did NOT add them here yet:
 // allowlisting them WITHOUT also extending the build mapping + exporter would let
-// the agent write a file that never reaches the built app — a worse trap than the
+// the agent write a file that never reaches the built app - a worse trap than the
 // bug this allowlist fixes. To support one, update all three places together
 // (this allowlist, mapVfsPathToDisk, and exporter.ts) and add a test.
 export const ALLOWED_ROOT_FILES = ['globalConfig.json'];
@@ -66,7 +66,7 @@ export const BLOCKED_PATTERNS = ['..', 'node_modules/', '.git/', '.env'];
  * Models sometimes emit tool calls with a missing/misnamed/non-string argument
  * (especially when a provider's streaming chunks get merged); without this
  * guard the tool throws `Cannot read properties of undefined (reading
- * 'replace')` — a TypeError the model cannot act on. A clear "missing 'path'"
+ * 'replace')` - a TypeError the model cannot act on. A clear "missing 'path'"
  * message lets it self-correct on the next attempt.
  */
 export function requireStringArg(
@@ -82,7 +82,7 @@ export function requireStringArg(
       ok: false,
       error:
         `Error: ${toolName} requires a non-empty string "${name}" argument (got: ${got}). ` +
-        `Call it again with {"${name}": "..."} — check the argument name and that the value is a plain string.`,
+        `Call it again with {"${name}": "..."} - check the argument name and that the value is a plain string.`,
     };
   }
   return { ok: true, value: v };
@@ -110,7 +110,7 @@ export function validatePath(path: string): string | null {
   return null;
 }
 
-/** Additional validation for write operations — must be in allowed directories. */
+/** Additional validation for write operations - must be in allowed directories. */
 export function validateWritePath(path: string): string | null {
   const baseError = validatePath(path);
   if (baseError) return baseError;
@@ -118,7 +118,7 @@ export function validateWritePath(path: string): string | null {
   const normalizedPath = path.replace(/\\/g, '/');
 
   // Allow UCC root config files (e.g. globalConfig.json) regardless of the
-  // package/ prefix — they belong at the source root, beside package/.
+  // package/ prefix - they belong at the source root, beside package/.
   const basename = normalizedPath.split('/').pop() ?? '';
   if (ALLOWED_ROOT_FILES.includes(basename)) {
     return null;

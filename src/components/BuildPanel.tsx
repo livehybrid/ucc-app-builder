@@ -71,6 +71,9 @@ const BuildLogs = styled.pre`
   font-size: 0.75rem;
   margin: 0;
   font-family: 'Splunk Platform Mono', Inconsolata, Consolas, monospace;
+  /* Readable on the near-black background - without it the <pre> inherits the
+     muted body color and renders dark-grey-on-dark. */
+  color: ${variables.contentColorDefault};
 `;
 
 function flattenVFS(node: VFSNode, basePath = ''): Array<{ path: string; content: string }> {

@@ -92,7 +92,7 @@ export function GitHubPanel({
         if (d?.clientId) setServerClientId(d.clientId);
       })
       .catch(() => {
-        /* no hosted client id — fall back to BYO */
+        /* no hosted client id - fall back to BYO */
       });
   }, []);
 
@@ -142,7 +142,7 @@ export function GitHubPanel({
       setError(`Connection failed: ${e instanceof Error ? e.message : String(e)}`);
       setDeviceCodeData(null);
       // Reveal the settings view so the Client ID field (and setup steps) are
-      // visible right under the error — otherwise the user is told to fix the
+      // visible right under the error - otherwise the user is told to fix the
       // Client ID with no field in sight.
       setShowSettings(true);
     } finally {
@@ -281,7 +281,7 @@ export function GitHubPanel({
         )}
         {serverClientId ? (
           <Message type="success" style={{ marginBottom: 12 }}>
-            Client ID is provided by this deployment (GITHUB_CLIENT_ID) — no setup needed.
+            Client ID is provided by this deployment (GITHUB_CLIENT_ID) - no setup needed.
           </Message>
         ) : null}
         <p>To use GitHub integration, you must provide a Client ID from a GitHub OAuth App.</p>
@@ -289,11 +289,11 @@ export function GitHubPanel({
           <li>Go to GitHub → Settings → Developer settings → OAuth Apps → New OAuth App.</li>
           <li>
             Any name/homepage works; for <em>Authorization callback URL</em> use any valid URL (e.g.{' '}
-            <code>http://localhost:3001</code>) — Device Flow doesn&apos;t use it.
+            <code>http://localhost:3001</code>) - Device Flow doesn&apos;t use it.
           </li>
           <li>
             On the app, tick <strong>&quot;Enable Device Flow&quot;</strong> and save.{' '}
-            <em>(Required — without it GitHub returns 404.)</em>
+            <em>(Required - without it GitHub returns 404.)</em>
           </li>
           <li>
             Copy the <strong>Client ID</strong> (the <code>Iv1…</code>/<code>Ov23…</code> value,
@@ -413,21 +413,33 @@ export function GitHubPanel({
       )}
 
       <ControlGroup label="Repository">
-        <Select
-          value={session.selectedRepo?.id}
-          onChange={(_e, { value }) => {
-            const repo = repos.find((r) => r.id === value);
-            if (repo) {
-              onSessionUpdate({ ...session, selectedRepo: repo });
-            }
-          }}
-          style={{ width: '100%' }}
-        >
-          {repos.map((repo) => (
-            <Select.Option key={repo.id} value={repo.id} label={repo.full_name} />
-          ))}
-        </Select>
-        <Button onClick={() => setRepoModalOpen(true)} label="New Repo" />
+        {/* Flex row so the Select grows but the "New Repo" button keeps its full width
+            (a 100%-wide Select otherwise squeezed it to "New R…"). */}
+        <div style={{ display: 'flex', gap: 8, alignItems: 'center', width: '100%' }}>
+          <Select
+            value={session.selectedRepo?.id}
+            onChange={(_e, { value }) => {
+              const repo = repos.find((r) => r.id === value);
+              if (repo) {
+                onSessionUpdate({ ...session, selectedRepo: repo });
+              }
+            }}
+            style={{ flex: 1, minWidth: 0 }}
+          >
+            {repos.map((repo) => (
+              <Select.Option key={repo.id} value={repo.id} label={repo.full_name} />
+            ))}
+          </Select>
+          {/* Creating a repo only makes sense when pushing/exporting - when importing you
+              pick an EXISTING repo to clone from. */}
+          {mode === 'push' && (
+            <Button
+              onClick={() => setRepoModalOpen(true)}
+              label="New Repo"
+              style={{ flexShrink: 0, whiteSpace: 'nowrap' }}
+            />
+          )}
+        </div>
       </ControlGroup>
 
       {session.selectedRepo && mode === 'import' && (

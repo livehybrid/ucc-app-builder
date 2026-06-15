@@ -81,7 +81,7 @@ export function resolveModelProfile(env: NodeJS.ProcessEnv = process.env): Model
   return { ...base, models };
 }
 
-/** Single default model — convenience for the current AIChatPanel until we split roles. */
+/** Single default model - convenience for the current AIChatPanel until we split roles. */
 export function defaultModel(env: NodeJS.ProcessEnv = process.env): string {
   return resolveModelProfile(env).models.executor;
 }

@@ -36,7 +36,7 @@ function formatStanza(confName: string, stanzaName: string) {
   const stanza = confSpecIndex.getStanza(confName, stanzaName);
   if (!stanza) return null;
   const lines: string[] = [];
-  lines.push(`# ${confName} — [${stanza.name}]`);
+  lines.push(`# ${confName} - [${stanza.name}]`);
   if (stanza.doc) lines.push(stanza.doc, '');
   if (!stanza.settings.length) {
     lines.push('(no settings documented)');

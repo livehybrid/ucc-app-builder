@@ -47,13 +47,36 @@ export async function expandRequest(opts: ExpandOptions): Promise<UccSpec> {
   }
 
   const res = await fetchWithRetry(url, { method: 'POST', headers, body, signal: opts.signal });
-  if (!res.ok) throw new Error(`Expansion request failed (${res.status}).`);
+  if (!res.ok) {
+    let detail = '';
+    try {
+      const e = (await res.json()) as { error?: { message?: string } | string };
+      detail = typeof e?.error === 'string' ? e.error : e?.error?.message || '';
+    } catch {
+      /* ignore */
+    }
+    throw new Error(`Expansion request failed (${res.status})${detail ? `: ${detail}` : ''}.`);
+  }
   const data = (await res.json()) as {
-    choices?: Array<{ message?: { content?: string } }>;
+    choices?: Array<{ message?: { content?: string; reasoning?: string }; finish_reason?: string }>;
+    error?: { message?: string } | string;
   };
-  const content = data?.choices?.[0]?.message?.content;
+  const choice = data?.choices?.[0];
+  const content = choice?.message?.content;
   if (typeof content !== 'string' || !content.trim()) {
-    throw new Error('Expansion returned an empty response.');
+    const errMsg = typeof data?.error === 'string' ? data.error : data?.error?.message;
+    // A reasoning model can spend its whole budget on `reasoning` and return empty
+    // `content` - name that case so the user knows to pick a non-reasoning chat model.
+    const reasoned = !!choice?.message?.reasoning || choice?.finish_reason === 'length';
+    throw new Error(
+      errMsg
+        ? `the model returned an error: ${errMsg}`
+        : reasoned
+          ? `the model "${opts.model || 'default'}" returned only reasoning and no content - ` +
+            `pick a non-reasoning chat model (e.g. anthropic/claude-sonnet-4.6) in ` +
+            `Configuration → AI Provider.`
+          : `the model "${opts.model || 'default'}" returned an empty response.`
+    );
   }
   return parseSpec(content);
 }
@@ -70,7 +93,7 @@ function namesFrom(payload: unknown, key: string): string[] {
 
 /**
  * Best-effort live grounding (indexes + sourcetypes) to make the spec schema-accurate.
- * Never throws — when Splunk grounding isn't configured the endpoints 404 and we expand
+ * Never throws - when Splunk grounding isn't configured the endpoints 404 and we expand
  * ungrounded (the spec is flagged grounded=false).
  */
 export async function fetchGrounding(signal?: AbortSignal): Promise<ExpansionGrounding> {

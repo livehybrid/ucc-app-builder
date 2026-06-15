@@ -144,11 +144,22 @@ export async function downloadBuild(buildId: string, appId: string): Promise<voi
   const response = await fetch(`${API_BASE}/build/${buildId}/download`);
 
   if (!response.ok) {
-    const error = await response.json();
-    throw new Error(error.error || 'Download failed');
+    const error = await response.json().catch(() => ({}));
+    throw new Error((error as { error?: string }).error || 'Download failed');
   }
 
-  const blob = await response.blob();
+  // The native Splunk handler returns base64 in JSON (a persistent REST handler can't
+  // return a raw binary payload); the standalone Node engine streams real gzip bytes.
+  let blob: Blob;
+  const contentType = response.headers?.get('content-type') || '';
+  if (contentType.includes('application/json')) {
+    const data = (await response.json()) as { base64?: string; error?: string };
+    if (!data.base64) throw new Error(data.error || 'Download failed');
+    const bytes = Uint8Array.from(atob(data.base64), (c) => c.charCodeAt(0));
+    blob = new Blob([bytes], { type: 'application/gzip' });
+  } else {
+    blob = await response.blob();
+  }
   const url = URL.createObjectURL(blob);
   const a = document.createElement('a');
   a.href = url;

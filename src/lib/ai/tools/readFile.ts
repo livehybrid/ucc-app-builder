@@ -3,7 +3,7 @@ import { Tool, validatePath, requireStringArg } from '../toolTypes';
 export const readFile: Tool = {
   name: 'read_file',
   description:
-    'Read the content of a specific file within the project. Use the EXACT paths returned by list_files — ' +
+    'Read the content of a specific file within the project. Use the EXACT paths returned by list_files - ' +
     'project files live under the app id (e.g. "my_app/globalConfig.json", "my_app/package/bin/input.py"). ' +
     'A leading slash is tolerated.',
   parameters: {

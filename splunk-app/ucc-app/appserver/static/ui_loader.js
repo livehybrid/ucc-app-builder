@@ -1,9 +1,10 @@
 /* Mounts the full standalone React SPA inside the native Splunk app.
  *
  * The SPA (built to appserver/static/ui/app.js|css) renders into #root. All of its
- * API traffic is repointed here — without touching SPA source — to a same-origin
- * Splunk REST proxy that forwards to the build engine, so there is no mixed-content
- * / CORS / cert problem and the existing backend is reused. */
+ * API traffic is repointed here - without touching SPA source - to a same-origin
+ * Splunk REST endpoint (builder_api.py) that implements every /api/* route NATIVELY
+ * in Splunk's python (ucc-gen + AppInspect build, artifact generators, LLM proxy,
+ * input emulator, Splunk metadata). There is NO Node build engine / sidecar. */
 require(['jquery', 'splunkjs/mvc/simplexml/ready!'], function ($) {
   'use strict';
   console.log('UCC_LOADER_RAN');
@@ -18,16 +19,16 @@ require(['jquery', 'splunkjs/mvc/simplexml/ready!'], function ($) {
 
   // Tell the SPA it is running behind the buffering Splunk REST proxy. A persistent
   // REST handler must return its whole payload at once, so it CANNOT stream SSE
-  // incrementally — the server-managed agent loop would otherwise arrive as one burst
+  // incrementally - the server-managed agent loop would otherwise arrive as one burst
   // at completion. The AI panel uses this flag to drive its agent loop client-side
   // (one buffered round-trip per turn) so progress appears step by step instead.
   window.__UCC_PROXIED__ = true;
 
-  // Splunk Web protects POST/PUT/DELETE through /splunkd/__raw/ with a CSRF token —
+  // Splunk Web protects POST/PUT/DELETE through /splunkd/__raw/ with a CSRF token -
   // the value of the `splunkweb_csrf_token_<port>` cookie, sent as X-Splunk-Form-Key.
   // CRITICAL: a browser may hold tokens for MULTIPLE Splunk ports (e.g. 8000 AND 8001);
   // we must pick THIS server's port (Splunk validates against splunkweb_csrf_token_
-  // <MRSPARKLE_PORT_NUMBER>), not just the first match — else CSRF validation fails.
+  // <MRSPARKLE_PORT_NUMBER>), not just the first match - else CSRF validation fails.
   function readCookie(name) {
     var parts = (document.cookie || '').split(';');
     for (var i = 0; i < parts.length; i++) {

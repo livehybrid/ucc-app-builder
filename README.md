@@ -21,11 +21,17 @@ The builder also ships as a **packaged Splunk app** (`splunk-app/`, app id
 end-to-end on a live instance:
 
 1. **Its builder tools are exposed as Splunk MCP Server tools** (`default/tools.conf` →
-   persistent REST handlers, registered into the Splunk MCP Server's `mcp_tools` KV
-   registry). Any MCP client — **the Splunk AI Assistant, Claude Desktop, another agent** —
-   can build a Splunk add-on by calling tools on Splunk's own MCP server. *Verified live:*
-   `ucc_create_addon → ucc_write_file → ucc_list_project → ucc_read_file` with state
-   persisting across calls.
+   persistent REST handlers; the tool defs live in
+   `appserver/static/tool_input_payload_signatures.json`). Registration into the Splunk
+   MCP Server's `mcp_tools` KV is **automatic on install**: on **Splunk Cloud** a native
+   synced-apps registrar reads `tools.conf` and registers the tools (nothing app-side
+   needed); on **Splunk Enterprise** the app self-registers via `bin/autoregister.py` - an
+   instance-aware handler fired by `app.conf` `[triggers] reload.tools = http_post
+   /ucc_app_builder/autoregister` that upserts the tools into the KV (and no-ops on Cloud,
+   detected via `server/info` `instance_type`). Any MCP client — **the Splunk AI Assistant,
+   Claude Desktop, another agent** — can then build a Splunk add-on by calling tools on
+   Splunk's own MCP server. *Verified live:* `ucc_create_addon → ucc_write_file →
+   ucc_list_project → ucc_read_file` with state persisting across calls.
 
 2. **An in-app "App Builder Advisor" runs on the Splunk Agent SDK (`splunklib.ai`).**
    `POST /services/ucc_app_builder/advisor {"prompt":"..."}` runs a `splunklib.ai` agent
@@ -34,11 +40,16 @@ end-to-end on a live instance:
    *Verified live:* "build an add-on called contoso_logs with an api_url field" →
    **AppInspect-clean `ta_contoso_logs-1.0.0.tar.gz` in ~40s**, all inside Splunk.
 
-Both surfaces share one build engine (`server/mcp/core.ts` + `server/services/agentLoop.ts`)
-— **no code duplication**. The native app reuses it via a small Node build-engine endpoint;
-the standalone app calls it directly. File access is **path-confined per user** in a KV
-collection (`builder_common.to_safe_project_path`) — the agent can touch only its own add-on
-project, never the Splunk filesystem. Architecture: [`architecture_diagram.md`](architecture_diagram.md);
+The **native Splunk app is fully self-contained — no Node sidecar**. Every `/api/*` route
+the embedded SPA uses is served in Splunk's own python by `bin/builder_api.py`: ucc-gen +
+AppInspect builds (`builder_build.py`, with `ucc-framework` + `splunk-appinspect` vendored
+into `lib/`), the deterministic artifact generators (`builder_generators.py`), the LLM proxy
+for expansion/inline-completion (`builder_llm.py`, reading the Configuration → AI Provider
+key), the input emulator, and Splunk metadata. The **standalone** dev app (`npm run dev:all`)
+still uses the Node engine under `server/` for local iteration + the eval bench. File access
+is **path-confined per user** in a KV collection (`builder_common.to_safe_project_path`) —
+the agent can touch only its own add-on project, never the Splunk filesystem.
+Architecture: [`architecture_diagram.md`](docs/architecture_diagram.md);
 deep dive + the five SDK-in-Splunk gotchas: [`docs/SPLUNK-APP-PLAN.md`](docs/SPLUNK-APP-PLAN.md);
 build/deploy: [`splunk-app/deploy/build_agent_app.sh`](splunk-app/deploy/build_agent_app.sh).
 
@@ -172,7 +183,7 @@ npx tsx eval/ucc-bench/runner.ts --dry-run        # validate task defs (no API, 
 MODEL_PROFILE=anthropic-multi npx tsx eval/ucc-bench/runner.ts   # full run (needs OPENROUTER_API_KEY)
 ```
 
-See [`architecture_diagram.md`](./architecture_diagram.md) for the full picture, and
+See [`architecture_diagram.md`](docs/architecture_diagram.md) for the full picture, and
 [`DEMO-SCRIPT.md`](./DEMO-SCRIPT.md) for the <3-minute storyboard.
 
 ### Why the dependency pins (AppInspect-clean packaging)
@@ -231,6 +242,38 @@ Beyond the chat agent, the web IDE assists you directly:
 - **Continue past max iterations** — if the agent hits its iteration cap, a one-click
   **Continue** button resumes the remaining work.
 
+## The authoring & data toolkit
+
+Beyond authoring `globalConfig.json` and the build loop, the builder helps you understand
+the data and produce the surrounding knowledge objects — each exposed **both** as an in-app
+action and (where it makes sense) as a **Splunk MCP Server tool** any external agent can call.
+
+- **Test Input — the input emulator.** Run a modular input's collection code the way Splunk
+  would (`stream_events`/`collect_events` with a stubbed helper + EventWriter, **real HTTP, no
+  install**) using values you supply, and see the **actual events it would index** — so you can
+  design `props.conf`/`transforms.conf` from real data instead of guessing.
+- **Generate dashboards & saved searches** (`generate_dashboard`, `generate_savedsearch` MCP
+  tools). Deterministic, LLM-free emitters: pass a structured spec and get exact **Dashboard
+  Studio v2** view XML or a `savedsearches.conf` stanza (report or scheduled alert) — the formats
+  models routinely get wrong by hand — written straight into the project.
+- **Generate tests** (`generate_tests` MCP tool). Scaffolds a **pytest-splunk-addon** suite
+  (`pytest.ini`, `test_<addon>.py`, `data/pytest-splunk-addon-data.conf`, samples, README) that
+  validates sourcetype/field assignment and **CIM** compliance against a real Splunk. Closes the
+  data loop: **Test Input → author props/transforms → generate_tests** (seed the samples with the
+  real events you captured in the emulator).
+- **My Apps.** A server-side (KV) library of saved add-on projects — save, list, resume and delete
+  multiple add-ons across sessions and devices (the native app's answer to single-state
+  localStorage).
+- **Seed from an installed add-on.** In the **Import** view, pick a UCC add-on **already installed
+  on this Splunk** and load its authoring source — the real `globalConfig.json` (surfaced at the
+  project root even though a built add-on keeps it under `appserver/static/js/build/`), plus
+  `default/` + `bin/` — straight into the builder to extend with the AI. Vendored libraries,
+  bytecode and instance-local config are excluded; the path is confined to `etc/apps`.
+- **Run History + real Stop.** Every Splunk Agent SDK run is persisted durably (KV
+  `ucc_agent_traces`), so the **🕘 History** panel can replay a past run's full trace (assistant
+  turns, tool calls, results) for review or debugging. **Stop** now cancels the run server-side —
+  it kills the `splunklib.ai` runner's process group so an in-flight model call stops billing.
+
 ## How AI is used
 
 - **Self-correcting build agent** — the loop above. The *reasoning* (which findings to fix,
@@ -249,7 +292,7 @@ Beyond the chat agent, the web IDE assists you directly:
 Prerequisites: **Node 20+**, **Python 3.10+**, and the Splunk developer tools on `PATH`:
 
 ```bash
-pip install splunk-add-on-ucc-framework   # provides ucc-gen (tested: 6.4.0)
+pip install splunk-add-on-ucc-framework   # provides ucc-gen (tested: 6.5.1; native app vendors it)
 pip install splunk-appinspect              # provides splunk-appinspect (tested: 4.2.1)
 ```
 
@@ -312,7 +355,10 @@ deterministic breakers stop it the moment it stops making progress:
 
 The current defaults are exposed at `GET /api/ai/config` under `agent: {...}`, and
 the **Settings panel** in the AI Agent chat has a **"Max agent iterations"** control
-(seeded from that endpoint, validated to [1, 20]) that is sent in each agent request.
+that is sent in each agent request. In the **native Splunk app** the chat runs on the
+Splunk Agent SDK and the control accepts **[1, 100], default 30** (`AIChatPanel` +
+`bin/builder_llm.py`). The legacy **standalone Node dev server**'s planner/executor still
+clamps to **[1, 20], default 12** via `AGENT_MAX_ITERATIONS` (above).
 
 ## Run
 
@@ -449,7 +495,7 @@ npx tsx scripts/agent-cli.ts --json "…"              # machine-readable result
 ## Tests & checks
 
 ```bash
-npm run test:run    # vitest — 479 unit tests (incl. AppInspect policy + clean-package regressions)
+npm run test:run    # vitest — 519 unit tests (incl. AppInspect policy + clean-package regressions)
 npm run typecheck   # tsc --noEmit (frontend)
 npm run build:server# tsc -p server/tsconfig.json (backend incl. loop + MCP)
 npm run build       # production frontend bundle
@@ -461,8 +507,12 @@ npm run test:e2e    # Playwright browser tests (hermetic; mocks all /api/*)
 
 CI runs all of the above in [`.github/workflows/ci.yml`](./.github/workflows/ci.yml):
 a fast hermetic gate (typecheck/lint/vitest/build/MCP smoke), a `loop-smoke` job that
-installs `ucc-gen` 6.4.0 + `splunk-appinspect` 4.2.1 and proves both add-ons reach CLEAN,
-and a Playwright `e2e` job.
+installs the **pinned** `ucc-gen` + `splunk-appinspect` from
+[`.github/dev-requirements.txt`](./.github/dev-requirements.txt) and proves both add-ons
+reach CLEAN, and a Playwright `e2e` job. The pin keeps that deterministic gate reproducible
+and is tracked by **Dependabot** (so a new ucc-gen/AppInspect release arrives as a PR the
+gate validates before merge); the `splunk-app`, `splunk-integration` and `licenses` jobs
+instead float to the **latest** ucc-gen (`>=`) so they always compat-test the newest release.
 
 ## Key code map
 

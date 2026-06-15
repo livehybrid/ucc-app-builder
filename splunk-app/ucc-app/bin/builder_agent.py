@@ -1,8 +1,8 @@
 """
-UCC App Builder — Splunk Agent SDK (splunklib.ai) chat backend, job + poll style.
+UCC App Builder - Splunk Agent SDK (splunklib.ai) chat backend, job + poll style.
 
-The in-app SPA chat is driven by the **Splunk Agent SDK** (`splunklib.ai`) — the same
-agent the Advisor uses, with the builder tools (tagged `ucc_builder`) — but as a
+The in-app SPA chat is driven by the **Splunk Agent SDK** (`splunklib.ai`) - the same
+agent the Advisor uses, with the builder tools (tagged `ucc_builder`) - but as a
 multi-turn, live-progress chat. Splunk persistent REST handlers must return their whole
 payload at once (they can't stream SSE), and the embedded SPA reaches the engine through
 a *buffering* proxy, so we surface progress by **polling**:
@@ -21,6 +21,7 @@ unified UCC Configuration-page [ai_provider] settings, falling back to the legac
 """
 import json
 import os
+import signal
 import subprocess
 import sys
 import time
@@ -79,6 +80,13 @@ def _safe_job_id(raw):
     return s if (s and len(s) <= 64 and all(c in "0123456789abcdef" for c in s)) else None
 
 
+def _user(req):
+    """The authenticated username from the persistconn session (keys the trace store the
+    same way advisor_runner persisted it)."""
+    sess = req.get("session", {}) if isinstance(req, dict) else {}
+    return sess.get("user") if isinstance(sess, dict) else None
+
+
 def _prune_old_jobs():
     try:
         now = time.time()
@@ -116,6 +124,12 @@ class AgentHandler(PersistentServerConnectionApplication):
                 return self._start(req, session_key)
             if action == "agent_poll":
                 return self._poll(req, session_key)
+            if action == "agent_cancel":
+                return self._cancel(req, session_key)
+            if action == "agent_traces":
+                return self._list_traces(req, session_key)
+            if action == "agent_trace":
+                return self._get_trace(req, session_key)
             return _json_response({"error": f"Unknown action: {action}"}, status=404)
         except BaseException as e:  # noqa: BLE001
             import traceback
@@ -162,10 +176,10 @@ class AgentHandler(PersistentServerConnectionApplication):
             "session_key": session_key, "prompt": prompt, "messages": messages,
             "model": model_name, "base_url": base_url, "api_key": api_key,
             "max_steps": max_steps, "provider": provider, "temperature": temperature,
-            "events_path": events_path,
+            "events_path": events_path, "job_id": job_id,
         }
         # Write the request (incl. the key) to a 0600 file the runner reads then unlinks
-        # — avoids a stdin-pipe deadlock on a large history and keeps the key off argv.
+        # - avoids a stdin-pipe deadlock on a large history and keeps the key off argv.
         fd = os.open(req_path, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
         with os.fdopen(fd, "w", encoding="utf-8") as fh:
             fh.write(json.dumps(payload))
@@ -234,7 +248,7 @@ class AgentHandler(PersistentServerConnectionApplication):
         terminal = bool(parsed_all) and parsed_all[-1].get("event") in ("done", "error")
         running = not terminal
         if running:
-            # No terminal event yet — confirm the worker is still alive; if it died
+            # No terminal event yet - confirm the worker is still alive; if it died
             # without writing one (OOM/kill), surface a synthetic error so the UI stops.
             pid = None
             try:
@@ -247,3 +261,69 @@ class AgentHandler(PersistentServerConnectionApplication):
                 running = False
 
         return _json_response({"events": new, "cursor": new_cursor, "running": running})
+
+    def _cancel(self, req, session_key):
+        """Stop a running agent job: kill the runner's whole process group (the
+        detached runner + the splunklib.ai LLM/tool loop it drives, so an
+        in-flight model call stops billing), then append a terminal `error`
+        event so any in-flight poll ends the run in the UI."""
+        args = _args(req)
+        job_id = _safe_job_id(args.get("job_id"))
+        if not job_id:
+            return _json_response({"error": "valid job_id is required"}, status=400)
+        events_path = os.path.join(_JOB_DIR, job_id + ".jsonl")
+        if not os.path.isfile(events_path):
+            return _json_response({"cancelled": False, "error": "unknown or expired job"},
+                                  status=404)
+        killed = False
+        pid = None
+        try:
+            with open(os.path.join(_JOB_DIR, job_id + ".pid"), "r", encoding="utf-8") as pf:
+                pid = int(pf.read().strip())
+        except (OSError, ValueError):
+            pid = None
+        if pid is not None and _pid_alive(pid):
+            # The runner is spawned with start_new_session=True, so its PID is the
+            # process-group leader; kill the whole group to take down child threads
+            # and any subprocess it started (the LLM loop runs in-process).
+            for sig in (signal.SIGTERM, signal.SIGKILL):
+                try:
+                    os.killpg(pid, sig)
+                    killed = True
+                except OSError:
+                    # Fall back to a plain kill if the group is already gone.
+                    try:
+                        os.kill(pid, sig)
+                        killed = True
+                    except OSError:
+                        pass
+                if not _pid_alive(pid):
+                    break
+        # Append a terminal error so the next poll terminates the run in the UI even
+        # if the worker died before writing its own done/error event.
+        try:
+            with open(events_path, "a", encoding="utf-8") as fh:
+                fh.write(json.dumps({"event": "error", "error": "Cancelled by user."}) + "\n")
+        except OSError:
+            pass
+        return _json_response({"cancelled": True, "killed": killed})
+
+    def _traces(self, req, session_key):
+        import builder_common
+        return builder_common.KVAgentTraces(session_key, APP, user=_user(req))
+
+    def _list_traces(self, req, session_key):
+        """List this user's recent durable agent-run traces (newest first, no event blob)."""
+        rows = self._traces(req, session_key).list(limit=50)
+        return _json_response({"ok": True, "traces": rows})
+
+    def _get_trace(self, req, session_key):
+        """Fetch one durable trace (with its full event list) by job_id."""
+        args = _args(req)
+        job_id = _safe_job_id(args.get("job_id"))
+        if not job_id:
+            return _json_response({"error": "valid job_id is required"}, status=400)
+        doc = self._traces(req, session_key).get(job_id)
+        if doc is None:
+            return _json_response({"ok": True, "found": False}, status=404)
+        return _json_response({"ok": True, "found": True, "trace": doc})

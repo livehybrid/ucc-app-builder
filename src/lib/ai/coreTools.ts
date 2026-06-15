@@ -1,5 +1,5 @@
 /**
- * CORE_AGENT_TOOLS — the single, canonical definition of the primitive agent
+ * CORE_AGENT_TOOLS - the single, canonical definition of the primitive agent
  * tools shared by BOTH execution surfaces:
  *
  *   - the server-side tool-calling loop (server/routes/ai.ts → agentRunner), and

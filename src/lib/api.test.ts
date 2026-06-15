@@ -144,6 +144,7 @@ describe('downloadBuild', () => {
 
     mockFetch.mockResolvedValueOnce({
       ok: true,
+      headers: { get: () => 'application/gzip' },
       blob: () => Promise.resolve(mockBlob),
     });
 
@@ -169,6 +170,30 @@ describe('downloadBuild', () => {
     }) as any);
 
     await downloadBuild('build-123', 'my_app');
+    expect(clickMock).toHaveBeenCalled();
+  });
+
+  it('should decode a base64 JSON response (native Splunk handler)', async () => {
+    const clickMock = vi.fn();
+    // "hello" base64-encoded - the native handler returns this shape since a persistent
+    // REST handler can't stream raw binary.
+    mockFetch.mockResolvedValueOnce({
+      ok: true,
+      headers: { get: () => 'application/json' },
+      json: () => Promise.resolve({ ok: true, filename: 'my_app.tgz', encoding: 'base64', base64: 'aGVsbG8=' }),
+    });
+    vi.stubGlobal('URL', {
+      createObjectURL: vi.fn(() => 'blob:test-url'),
+      revokeObjectURL: vi.fn(),
+    });
+    vi.spyOn(document.body, 'appendChild').mockImplementation(((node: unknown) => node) as never);
+    vi.spyOn(document.body, 'removeChild').mockImplementation(((node: unknown) => node) as never);
+    vi.spyOn(document, 'createElement').mockImplementation(((tag: string) =>
+      tag === 'a'
+        ? ({ href: '', download: '', click: clickMock } as unknown as HTMLAnchorElement)
+        : document.createElement(tag)) as never);
+
+    await downloadBuild('build-456', 'my_app');
     expect(clickMock).toHaveBeenCalled();
   });
 

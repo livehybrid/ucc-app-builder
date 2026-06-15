@@ -13,7 +13,7 @@ import { parseSpec, EXAMPLE_SPECS } from '../lib/specToComponents';
 import { runBuildLoop, type LoopEvent, type LoopResult } from '../lib/api';
 
 /**
- * LoopPanel — the agentic AppInspect loop, surfaced in the UI (the demo money-shot).
+ * LoopPanel - the agentic AppInspect loop, surfaced in the UI (the demo money-shot).
  *
  * Flow: natural-language spec -> deterministic parse to a UCC project -> stream the
  * keystone loop (ucc-gen build -> splunk-appinspect -> auto-fix -> re-run) live ->
@@ -113,6 +113,9 @@ const MutedP = styled.p`
 
 const Summary = styled.pre`
   background: rgba(0, 0, 0, 0.3);
+  /* Readable on the near-black background - without it the <pre> inherits the muted
+     grey body colour and the build/AppInspect output is barely legible. */
+  color: ${variables.contentColorDefault};
   border-radius: 4px;
   padding: 12px;
   font-size: 0.78rem;
@@ -199,7 +202,7 @@ export function LoopPanel() {
         <MutedP>
           The same build → <code>ucc-gen build</code> → <code>splunk-appinspect</code> → auto-fix →
           re-run loop the <strong>AI Agent</strong> drives via its <code>build_and_inspect</code>{' '}
-          tool — here as a standalone, deterministic surface (no LLM by default, so it is
+          tool - here as a standalone, deterministic surface (no LLM by default, so it is
           reproducible for tests/demos). For the full conversational experience, use the{' '}
           <strong>AI Agent</strong> panel.
         </MutedP>
@@ -282,7 +285,7 @@ export function LoopPanel() {
               </Message>
             ) : (
               <Message type="warning" data-testid="loop-notclean">
-                Not clean after {result.iterations} iteration(s) — see trace above.
+                Not clean after {result.iterations} iteration(s) - see trace above.
               </Message>
             )}
           </Row>

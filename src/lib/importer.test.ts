@@ -2,6 +2,7 @@ import { describe, it, expect } from 'vitest';
 import JSZip from 'jszip';
 import {
   importAppFromZip,
+  analyzeImportedFiles,
   classifyFileOrigin,
   createManifestFromImport,
   extractSourceFiles,
@@ -249,5 +250,45 @@ describe('extractSourceFiles', () => {
     const sourceFiles = extractSourceFiles(analysis);
 
     expect(sourceFiles.some((f) => f.origin === 'modified-generated')).toBe(true);
+  });
+});
+
+describe('analyzeImportedFiles (shared core for ZIP + seed-from-installed)', () => {
+  it('derives metadata from globalConfig.json and classifies files', async () => {
+    const analysis = await analyzeImportedFiles([
+      {
+        path: 'ta_demo/globalConfig.json',
+        content: JSON.stringify({ meta: { name: 'ta_demo', displayName: 'Demo TA', version: '2.3.0' } }),
+      },
+      { path: 'ta_demo/package/bin/ta_demo.py', content: 'print(1)\n' },
+      { path: 'ta_demo/default/props.conf', content: '[ta:demo]\nSHOULD_LINEMERGE = false\n' },
+    ]);
+    expect(analysis.appId).toBe('ta_demo');
+    expect(analysis.displayName).toBe('Demo TA');
+    expect(analysis.version).toBe('2.3.0');
+    expect(analysis.isUCCApp).toBe(true);
+    // globalConfig is classified source; checksums are computed for every file.
+    expect(analysis.files.every((f) => typeof f.checksum === 'string' && f.checksum.length > 0)).toBe(true);
+    const gc = analysis.files.find((f) => f.path.endsWith('globalConfig.json'));
+    expect(gc?.origin).toBe('source');
+  });
+
+  it('falls back to app.conf + path when no globalConfig.json is present', async () => {
+    const analysis = await analyzeImportedFiles([
+      { path: 'legacy_app/default/app.conf', content: '[launcher]\nversion = 9.9.9\n[ui]\nlabel = Legacy App\n' },
+      { path: 'legacy_app/bin/run.py', content: '# x\n' },
+    ]);
+    expect(analysis.appId).toBe('legacy_app');
+    expect(analysis.displayName).toBe('Legacy App');
+    expect(analysis.version).toBe('9.9.9');
+    expect(analysis.isUCCApp).toBe(false);
+  });
+
+  it('passes through initial warnings', async () => {
+    const analysis = await analyzeImportedFiles(
+      [{ path: 'a/globalConfig.json', content: '{"meta":{"name":"a"}}' }],
+      ['1 file skipped (too large)']
+    );
+    expect(analysis.warnings).toContain('1 file skipped (too large)');
   });
 });

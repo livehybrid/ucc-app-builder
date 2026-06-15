@@ -97,7 +97,7 @@ export function parsePatch(text: string): ParsedPatch {
     } else if (line.trim() === '' || line.startsWith('*** ')) {
       i++;
     } else {
-      // Stray content at the top-level is a parse error — but be forgiving to
+      // Stray content at the top-level is a parse error - but be forgiving to
       // whitespace-only lines above.
       if (line.trim() === '') {
         i++;
@@ -120,7 +120,7 @@ function parseHunks(body: string[], start: number): { hunks: PatchHunk[]; nextIn
     const line = body[i];
     if (line.startsWith('*** ')) break;
     if (line.startsWith('@@')) {
-      // New hunk header — ignore the rest of the header line.
+      // New hunk header - ignore the rest of the header line.
       const hunk: PatchHunk = { contextAndMinus: [], contextAndPlus: [] };
       i++;
       while (i < body.length && !body[i].startsWith('@@') && !body[i].startsWith('*** ')) {
@@ -137,7 +137,7 @@ function parseHunks(body: string[], start: number): { hunks: PatchHunk[]; nextIn
           hunk.contextAndMinus.push('');
           hunk.contextAndPlus.push('');
         } else {
-          // Unexpected prefix — treat as context to be lenient.
+          // Unexpected prefix - treat as context to be lenient.
           hunk.contextAndMinus.push(raw);
           hunk.contextAndPlus.push(raw);
         }

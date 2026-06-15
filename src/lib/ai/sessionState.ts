@@ -20,7 +20,7 @@ export interface Decision {
   question: string;
   /** Chosen answer. */
   decision: string;
-  /** Why this was chosen — becomes searchable context later. */
+  /** Why this was chosen - becomes searchable context later. */
   rationale?: string;
   createdAt: string;
 }

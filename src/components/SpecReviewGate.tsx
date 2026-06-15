@@ -1,9 +1,9 @@
 /**
- * SpecReviewGate — the human review gate between Expert Expansion and the build.
+ * SpecReviewGate - the human review gate between Expert Expansion and the build.
  *
  * The agent's biggest failure mode is building a thin add-on (one input, no auth, no CIM).
  * Expansion (src/lib/ai/expansion.ts) proposes a COMPLETE UccSpec; this component lets the
- * user inspect and edit it — inputs, fields, auth, proxy/logging, sourcetypes, CIM — then
+ * user inspect and edit it - inputs, fields, auth, proxy/logging, sourcetypes, CIM - then
  * confirm. The approved spec seeds whichever agent path actually builds it. Editable and
  * grounded beats a black box.
  */
@@ -212,7 +212,7 @@ export function SpecReviewGate({ spec, onBuild, onCancel, busy }: Props) {
     <>
       <Wrap>
         <Message type="info">
-          Review the proposed add-on. Edit anything, then build — the agent will author it
+          Review the proposed add-on. Edit anything, then build - the agent will author it
           to match. {draft.grounded ? <Tag $ok>schema-grounded</Tag> : <Tag>not grounded</Tag>}
         </Message>
 

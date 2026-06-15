@@ -80,6 +80,26 @@ TOOLS = [
      {"name": "$name$", "search": "$search$", "description": "$description$",
       "cronSchedule": "$cronSchedule$", "earliest": "$earliest$", "latest": "$latest$",
       "alert": "$alert$"}),
+    ("ucc_generate_tests", "POST", "/services/ucc_app_builder/generate_tests",
+     "Generate a pytest-splunk-addon test scaffold to validate the add-on's knowledge objects "
+     "(sourcetype/source/index assignment, props.conf/transforms.conf field extractions, and CIM "
+     "data-model compliance). Provide sourcetypes[] = [{sourcetype, source?, index?, inputType? "
+     "(modinput|scripted_input|file_monitor|uf_file_monitor|syslog_tcp), cimDataModels?[], "
+     "sampleEvents?[] (raw events captured from the input emulator)}]. Writes tests/ "
+     "(pytest.ini, requirements.txt, test_<addon>.py, data/pytest-splunk-addon-data.conf, "
+     "data/samples/*.sample, README.md). Use after authoring props/transforms to prove them.",
+     {"sourcetypes": {"type": "array", "description": "Sourcetypes to validate.",
+                      "items": {"type": "object",
+                                "properties": {"sourcetype": {"type": "string"},
+                                               "source": {"type": "string"},
+                                               "index": {"type": "string"},
+                                               "inputType": {"type": "string"},
+                                               "cimDataModels": {"type": "array",
+                                                                 "items": {"type": "string"}},
+                                               "sampleEvents": {"type": "array",
+                                                                "items": {"type": "string"}}}}}},
+     ["sourcetypes"],
+     {"sourcetypes": "$sourcetypes$"}),
 ]
 
 

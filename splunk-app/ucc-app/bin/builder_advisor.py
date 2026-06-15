@@ -1,20 +1,20 @@
 """
-UCC App Builder — "App Builder Advisor" REST handler (the in-app agent).
+UCC App Builder - "App Builder Advisor" REST handler (the in-app agent).
 
 Runs an agent via the **Splunk Agent SDK (splunklib.ai)** that authors a UCC
 add-on by calling the local tools (builder_agent_tools, tagged `ucc_builder`) and
 the ucc-gen + AppInspect build loop. The LLM is provider-agnostic; we default to
 an OpenAI-compatible endpoint pointed at **OpenRouter** (so it reuses the existing
-OpenRouter key/credit — no SAIA, no Splunk hosted models required).
+OpenRouter key/credit - no SAIA, no Splunk hosted models required).
 
   POST /ucc_app_builder/advisor   { "prompt": "...", "model": "..." }
 
-ARCHITECTURE NOTE — why the agent runs in a subprocess:
+ARCHITECTURE NOTE - why the agent runs in a subprocess:
 splunkd runs persistent REST handlers in a SHARED interpreter that has many OTHER
 apps' libraries cached. Importing our vendored agent stack (splunklib.ai 3.0,
 pydantic v2, typing_extensions, langchain, …) in-process collides
 non-deterministically with whatever another app loaded first. So this handler stays
-thin — it reads the secret/conf via splunk.rest (safe; that's Splunk's own module),
+thin - it reads the secret/conf via splunk.rest (safe; that's Splunk's own module),
 then spawns `bin/advisor_runner.py` as a fresh `/opt/splunk/bin/python3` subprocess
 with PYTHONPATH = our lib only (a pristine interpreter, like the SDK's own tools.py
 spawn) and exchanges JSON over stdin/stdout.
@@ -82,7 +82,7 @@ _UCC_REALM = f"__REST_CREDENTIAL__#{APP}#configs/conf-{SETTINGS_CONF}"
 
 def ucc_ai_settings(session_key):
     """Read the UCC Configuration page [ai_provider] stanza (api_key decrypted) via
-    solnlib — the canonical, unified AI-provider config. Returns {} on any failure so
+    solnlib - the canonical, unified AI-provider config. Returns {} on any failure so
     callers fall back to the legacy [advisor] stanza + custom storage/passwords realm."""
     try:
         from solnlib import conf_manager

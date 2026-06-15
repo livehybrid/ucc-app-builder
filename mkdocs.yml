@@ -1,0 +1,56 @@
+site_name: UCC App Builder
+site_description: An agentic Splunk add-on builder — describe it in chat, the agent builds and self-corrects until App-Inspect-clean.
+site_url: https://livehybrid.github.io/ucc-app-builder/
+repo_url: https://github.com/livehybrid/ucc-app-builder
+repo_name: livehybrid/ucc-app-builder
+edit_uri: edit/main/docs/
+
+theme:
+  name: material
+  palette:
+    - media: "(prefers-color-scheme: dark)"
+      scheme: slate
+      primary: black
+      accent: green
+      toggle:
+        icon: material/weather-sunny
+        name: Switch to light mode
+    - media: "(prefers-color-scheme: light)"
+      scheme: default
+      primary: black
+      accent: green
+      toggle:
+        icon: material/weather-night
+        name: Switch to dark mode
+  features:
+    - navigation.instant
+    - navigation.tracking
+    - navigation.top
+    - content.code.copy
+    - search.suggest
+    - toc.follow
+
+nav:
+  - Home: index.md
+  - User Guide: USER-GUIDE.md
+  - Architecture: architecture_diagram.md
+  - Building add-ons: build_app.md
+  - splunklib.ai (Agent SDK): SPLUNKLIB.md
+  - UCC reference: UCC-DOCS.md
+  - LLM notes: LLM.md
+
+markdown_extensions:
+  - admonition
+  - attr_list
+  - md_in_html
+  - toc:
+      permalink: true
+  - pymdownx.highlight:
+      anchor_linenums: true
+  - pymdownx.superfences
+  - pymdownx.inlinehilite
+  - pymdownx.tabbed:
+      alternate_style: true
+
+plugins:
+  - search

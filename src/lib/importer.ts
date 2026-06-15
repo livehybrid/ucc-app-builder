@@ -10,31 +10,21 @@ import { FILE_PATTERNS } from '../types/manifest';
 import { VirtualFileSystem } from './vfs';
 
 /**
- * Import an app from a ZIP file
+ * Analyze an already-extracted set of add-on files into an ImportAnalysis: derive the
+ * app metadata (from globalConfig.json or app.conf), compute checksums and classify each
+ * file's origin. Shared by both import paths - a ZIP upload (importAppFromZip) and an
+ * add-on already installed on this Splunk (the seed-from-installed flow).
  */
-export async function importAppFromZip(zipFile: File): Promise<ImportAnalysis> {
-  const zip = await JSZip.loadAsync(zipFile);
+export async function analyzeImportedFiles(
+  rawFiles: Array<{ path: string; content: string; checksum?: string }>,
+  initialWarnings: string[] = []
+): Promise<ImportAnalysis> {
+  const warnings = [...initialWarnings];
   const files: Array<{ path: string; content: string; checksum: string }> = [];
-  const warnings: string[] = [];
-
-  // Extract all files (text as string, binary as base64)
-  for (const [path, zipEntry] of Object.entries(zip.files)) {
-    if (zipEntry.dir) continue;
-
-    try {
-      if (isBinaryFile(path)) {
-        // Read binary files as base64
-        const base64 = await zipEntry.async('base64');
-        const checksum = await sha256(base64);
-        files.push({ path: normalizePath(path), content: base64, checksum });
-      } else {
-        const content = await zipEntry.async('string');
-        const checksum = await sha256(content);
-        files.push({ path: normalizePath(path), content, checksum });
-      }
-    } catch {
-      warnings.push(`Could not read file: ${path}`);
-    }
+  for (const f of rawFiles) {
+    const path = normalizePath(f.path);
+    const checksum = f.checksum ?? (await sha256(f.content));
+    files.push({ path, content: f.content, checksum });
   }
 
   // Find globalConfig.json (relaxed search first to get metadata)
@@ -92,6 +82,37 @@ export async function importAppFromZip(zipFile: File): Promise<ImportAnalysis> {
     warnings,
     isUCCApp: globalConfig !== null,
   };
+}
+
+/**
+ * Import an app from a ZIP file
+ */
+export async function importAppFromZip(zipFile: File): Promise<ImportAnalysis> {
+  const zip = await JSZip.loadAsync(zipFile);
+  const raw: Array<{ path: string; content: string; checksum: string }> = [];
+  const warnings: string[] = [];
+
+  // Extract all files (text as string, binary as base64)
+  for (const [path, zipEntry] of Object.entries(zip.files)) {
+    if (zipEntry.dir) continue;
+
+    try {
+      if (isBinaryFile(path)) {
+        // Read binary files as base64
+        const base64 = await zipEntry.async('base64');
+        const checksum = await sha256(base64);
+        raw.push({ path: normalizePath(path), content: base64, checksum });
+      } else {
+        const content = await zipEntry.async('string');
+        const checksum = await sha256(content);
+        raw.push({ path: normalizePath(path), content, checksum });
+      }
+    } catch {
+      warnings.push(`Could not read file: ${path}`);
+    }
+  }
+
+  return analyzeImportedFiles(raw, warnings);
 }
 
 /**

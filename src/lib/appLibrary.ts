@@ -1,5 +1,5 @@
 /**
- * "My Apps" — server-side (KV) library of saved add-on projects, so a user can save,
+ * "My Apps" - server-side (KV) library of saved add-on projects, so a user can save,
  * list, resume and delete multiple add-ons across sessions/devices. Available only in the
  * native Splunk app (uses the same-origin splunkd REST endpoints via the loader's helper);
  * standalone keeps its single-state localStorage.

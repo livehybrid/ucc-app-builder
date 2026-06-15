@@ -13,6 +13,9 @@ dist/
 
 # Testing
 coverage/
+# Playwright e2e artifacts (traces/screenshots/videos + HTML report)
+test-results/
+playwright-report/
 
 # Environment
 .env
@@ -54,3 +57,9 @@ splunk-app/ucc-app/appserver/static/ui/app.css
 # Python bytecode (never commit / package)
 __pycache__/
 *.pyc
+
+# MkDocs build output
+/site/
+
+splunk-app/ucc-app/lib/splunklib/__pycache__
+splunk-app/ucc-app/lib/splunklib/ai/__pycache__

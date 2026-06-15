@@ -44,7 +44,7 @@ let pythonAssistRegisteredGlobal = false;
 // The conf completion provider is registered ONCE (above guards) but needs the
 // CURRENTLY-mounted FileBrowser's selected file. A component ref captured in
 // the provider closure goes stale after the first vfsVersion remount (the old
-// instance's ref stops updating), silently killing all .conf suggestions —
+// instance's ref stops updating), silently killing all .conf suggestions -
 // so the live path is mirrored into module scope instead.
 let activeEditorPath: string | null = null;
 
@@ -192,7 +192,7 @@ export function FileBrowser({
 }: FileBrowserProps) {
   const [selectedPath, setSelectedPath] = useState<string | null>(null);
   const [expandedDirs, setExpandedDirs] = useState<Set<string>>(new Set(['/']));
-  // Inline (ghost-text) AI completion — opt-in (default OFF), persisted in localStorage.
+  // Inline (ghost-text) AI completion - opt-in (default OFF), persisted in localStorage.
   const [aiComplete, setAiComplete] = useState<boolean>(() => inlineEnabled());
   const [completeModel, setCompleteModel] = useState<string>(() => inlineModel());
   const [editedContent, setEditedContent] = useState<string | null>(null);
@@ -253,7 +253,7 @@ export function FileBrowser({
     };
 
     // Start with the bundled subset, then upgrade to the AUTHORITATIVE schema
-    // extracted from the installed ucc-gen package (server endpoint) — full
+    // extracted from the installed ucc-gen package (server endpoint) - full
     // entity/validator definitions, always matching the build engine version.
     applySchema(uccSchema, 'ucc://schema/bundled-subset');
     fetch('/api/ucc/schema')
@@ -262,7 +262,7 @@ export function FileBrowser({
         if (d?.schema) applySchema(d.schema, `ucc://schema/ucc-gen-${d.uccVersion ?? 'live'}`);
       })
       .catch(() => {
-        // Server offline — bundled subset stays active.
+        // Server offline - bundled subset stays active.
       });
 
     // Add Save Command (Ctrl+S / Cmd+S)
@@ -285,7 +285,7 @@ export function FileBrowser({
 
     monaco.languages.register({ id: 'splunk-conf' });
 
-    // Syntax highlighting for .conf/.meta — the language was previously
+    // Syntax highlighting for .conf/.meta - the language was previously
     // registered without a tokenizer, so conf files rendered as plain text.
     monaco.languages.setMonarchTokensProvider('splunk-conf', {
       tokenizer: {
@@ -356,7 +356,7 @@ export function FileBrowser({
           endColumn: position.column,
         });
 
-        // Module-scope mirror of the mounted instance's selected path — a
+        // Module-scope mirror of the mounted instance's selected path - a
         // component ref here goes stale after the first remount (see above).
         const currentPath = activeEditorPath;
         const filename = currentPath?.split('/').pop() || '';
@@ -519,13 +519,23 @@ export function FileBrowser({
       monaco.languages.registerCompletionItemProvider('python', {
         triggerCharacters: ['.', '(', '_'],
         provideCompletionItems: () => {
-          const suggestions = SPLUNK_SDK_REFERENCE.map((item) => ({
-            label: item.symbol,
-            kind: monaco.languages.CompletionItemKind.Function,
-            insertText: item.symbol,
-            detail: item.signature,
-            documentation: `${item.module}\n\n${item.description}`,
-          }));
+          const suggestions = SPLUNK_SDK_REFERENCE.map((item) => {
+            // Qualified symbols (e.g. "EventWriter.write_event") are members called on an
+            // instance: typing `ew.wr` and accepting must insert just `write_event`, not the
+            // class-qualified name (which produced `ew.EventWriter.write_event`). Insert the
+            // member; keep the qualified name in the detail line for context.
+            const member = item.symbol.includes('.')
+              ? item.symbol.slice(item.symbol.lastIndexOf('.') + 1)
+              : item.symbol;
+            return {
+              label: member,
+              kind: monaco.languages.CompletionItemKind.Function,
+              insertText: member,
+              filterText: member,
+              detail: `${item.symbol}${item.signature ? ` ${item.signature}` : ''}`,
+              documentation: `${item.module}\n\n${item.description}`,
+            };
+          });
 
           const uccSnippets = [
             {
@@ -602,7 +612,7 @@ export function FileBrowser({
 
       // Inline (ghost-text) AI completion. Registered once (global), gated at call time by
       // the opt-in flag. Debounced + cancelled via Monaco's token; fetchCompletion caches
-      // and is fail-soft (returns '' — never throws into the editor).
+      // and is fail-soft (returns '' - never throws into the editor).
       monaco.languages.registerInlineCompletionsProvider(['splunk-conf', 'python', 'json'], {
         provideInlineCompletions: async (
           model: {
@@ -685,7 +695,7 @@ export function FileBrowser({
     spec.stanzas.forEach((s) => s.params.forEach((_, key) => allKnownParams.add(key)));
 
     // Duplicate detection: btool keeps only the last occurrence, so duplicate
-    // stanzas/keys are silent config-eating bugs — flag them.
+    // stanzas/keys are silent config-eating bugs - flag them.
     const seenStanzas = new Set<string>();
     let seenKeysInStanza = new Set<string>();
 
@@ -698,7 +708,7 @@ export function FileBrowser({
         if (seenStanzas.has(currentStanzaName)) {
           markers.push({
             severity: monacoRef.current.MarkerSeverity.Warning,
-            message: `Duplicate stanza [${currentStanzaName}] — settings will be merged, later values win.`,
+            message: `Duplicate stanza [${currentStanzaName}] - settings will be merged, later values win.`,
             startLineNumber: i + 1,
             startColumn: 1,
             endColumn: line.length + 1,
@@ -733,7 +743,7 @@ export function FileBrowser({
         if (seenKeysInStanza.has(keyName)) {
           markers.push({
             severity: monacoRef.current.MarkerSeverity.Warning,
-            message: `Duplicate key '${keyName}' in stanza [${currentStanzaName}] — the last value wins.`,
+            message: `Duplicate key '${keyName}' in stanza [${currentStanzaName}] - the last value wins.`,
             startLineNumber: i + 1,
             startColumn: 1,
             endColumn: key.length + 1,
@@ -835,7 +845,7 @@ export function FileBrowser({
           monacoRef.current.editor.setModelMarkers(liveModel, 'python-syntax', markers);
         })
         .catch(() => {
-          // Server unavailable — no diagnostics, never block editing.
+          // Server unavailable - no diagnostics, never block editing.
         });
     }, 600);
     return () => clearTimeout(timer);

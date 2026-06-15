@@ -13,7 +13,7 @@ import { toolRegistry } from './tools';
  *
  * If anyone re-introduces a duplicate inline copy of a primitive, this fails.
  */
-describe('CORE_AGENT_TOOLS — single source of truth', () => {
+describe('CORE_AGENT_TOOLS - single source of truth', () => {
   it('exposes the canonical primitive tools with unique names', () => {
     const names = CORE_AGENT_TOOLS.map((t) => t.name);
     // The 12 isomorphic primitives shared by both surfaces.

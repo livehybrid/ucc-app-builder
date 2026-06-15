@@ -3,7 +3,7 @@ Splunk Agent SDK local-tool MCP server entry point.
 
 The splunklib.ai Agent SPAWNS this file as a subprocess and speaks to it over the
 MCP stdio protocol. It must therefore:
-  1. Set SPLUNK_HOME — the SDK subprocess strips the environment (it only forwards
+  1. Set SPLUNK_HOME - the SDK subprocess strips the environment (it only forwards
      LD_LIBRARY_PATH), but the vendored splunklib + our tools need SPLUNK_HOME.
   2. Put bin/ and lib/ on sys.path so builder_agent_tools (+ vendored splunklib)
      import (this app has no ucc-gen import_declare_test).

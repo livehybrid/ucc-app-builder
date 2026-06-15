@@ -109,7 +109,7 @@ export const installToSplunkDocker: Tool = {
   name: 'install_to_splunk_docker',
   description:
     'Install the most recent build artifact into a local Splunk Docker container, restart Splunk, and return the web URL + any errors seen in splunkd.log. ' +
-    'Requires Docker available on the server host. Safe to call repeatedly — the container is reused.',
+    'Requires Docker available on the server host. Safe to call repeatedly - the container is reused.',
   parameters: {
     type: 'object',
     properties: {

@@ -114,12 +114,16 @@ const WizardActions = styled.div`
 
 const CodePreview = styled.pre`
   background: ${variables.backgroundColorPage};
+  /* Explicit readable text - without this the <pre> inherits the muted grey body
+     colour, which is nearly invisible on the grey dialog background. */
+  color: ${variables.textColor};
   border: 1px solid ${variables.borderColor};
   border-radius: 4px;
   padding: 16px;
   overflow: auto;
   font-family: 'Splunk Platform Mono', Inconsolata, Consolas, monospace;
   font-size: 0.875rem;
+  line-height: 1.5;
   max-height: 300px;
 `;
 
@@ -318,8 +322,17 @@ export function Wizard({ state, onChange, onGenerate }: WizardProps) {
                   }
                   setCustomLicense(false);
                   const preset = LICENSE_PRESETS.find((p) => p.name === selected);
-                  updateMetadata('licenseName', selected);
-                  if (preset?.uri) updateMetadata('licenseUri', preset.uri);
+                  // Set name + URI in ONE update - two updateMetadata calls would each
+                  // spread the same stale `state`, so the second would revert the first
+                  // (the licenseName change was being lost, leaving the dropdown unchanged).
+                  onChange({
+                    ...state,
+                    metadata: {
+                      ...state.metadata,
+                      licenseName: selected,
+                      ...(preset?.uri ? { licenseUri: preset.uri } : {}),
+                    },
+                  });
                 }}
               >
                 {LICENSE_PRESETS.map((p) => (

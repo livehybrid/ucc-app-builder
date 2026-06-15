@@ -35,6 +35,26 @@ python3 -m pip install --target "$APPLIB" --upgrade --no-compile \
   --python-version "$PYVER" --only-binary=:all: --platform "$PLAT" --implementation cp \
   langchain langchain-openai langgraph pydantic pydantic-core uuid-utils "mcp>=1.27.0"
 
+# Native build engine: vendor ucc-framework (ucc-gen build) + AppInspect so the in-Splunk
+# IDE builds + vets add-ons in Splunk's own python (3.13) with NO Node sidecar. AppInspect's
+# dep tree mixes compiled wheels (lxml, pillow, regex …) with sdist-only pure-python deps
+# (e.g. `painter`), so cross-platform `--only-binary=:all:` can't resolve it. We therefore
+# install with the TARGET interpreter itself ($SPLUNK_HOME/bin/python3 == 3.13 x86_64) when
+# present, which pulls the correct cp313 wheels AND builds the pure-python sdists natively.
+echo "==> installing native build engine (ucc-framework + splunk-appinspect)"
+BUILDPY="${SPLUNK_HOME:-/opt/splunk}/bin/python3"
+if [ -x "$BUILDPY" ] && "$BUILDPY" -c 'import sys; raise SystemExit(0 if sys.version_info[:2]==(3,13) else 1)' 2>/dev/null; then
+  echo "    using target interpreter $BUILDPY (native cp313 + sdist resolution)"
+  # Splunk's python needs LD_LIBRARY_PATH=$SPLUNK_HOME/lib for its bundled libssl (pip TLS).
+  LD_LIBRARY_PATH="${SPLUNK_HOME:-/opt/splunk}/lib" "$BUILDPY" -m pip install --target "$APPLIB" --upgrade --no-compile \
+    splunk-add-on-ucc-framework splunk-appinspect
+else
+  echo "    no target py3.13 interpreter — cross-installing wheels (sdist-only deps like painter need a 3.13 host)"
+  python3 -m pip install --target "$APPLIB" --upgrade --no-compile \
+    --python-version "$PYVER" --only-binary=:all: --platform "$PLAT" --implementation cp \
+    splunk-add-on-ucc-framework splunk-appinspect
+fi
+
 # The UCC Configuration-page REST handler (+ our advisor/proxy handlers that read it)
 # run under Splunk's PERSISTENT-handler python, which is 3.9 here — and import
 # solnlib -> urllib3. The cp313 step above pulls urllib3 2.x, whose module-level
@@ -56,11 +76,17 @@ APPDIR="$OUT/ucc_app_builder"
 #    ucc-gen may already emit a [triggers] stanza (e.g. reload.<restRoot>_settings for
 #    the Configuration page) — so ensure EACH custom conf's reload entry exists rather
 #    than skipping when [triggers] is merely present (else reload.tools goes missing).
+#    On every app-state change Splunk POSTs to the autoregister endpoint (http_post is
+#    the correct trigger type for our persistent [script:] handler; access_endpoints would
+#    call a _reload() method it doesn't implement). The handler self-registers the MCP
+#    tools on Splunk Enterprise (Splunk Cloud registers natively). The URL omits /services,
+#    matching Splunk's own [triggers] convention. Proven on Splunk Enterprise.
+RELOAD_TOOLS='reload.tools = http_post /ucc_app_builder/autoregister'
 if grep -q '^\[triggers\]' "$APPDIR/default/app.conf"; then
-  grep -q '^reload\.tools' "$APPDIR/default/app.conf" || sed -i '/^\[triggers\]/a reload.tools = simple' "$APPDIR/default/app.conf"
+  grep -q '^reload\.tools' "$APPDIR/default/app.conf" || sed -i "/^\[triggers\]/a $RELOAD_TOOLS" "$APPDIR/default/app.conf"
   grep -q '^reload\.ucc_app_builder_settings' "$APPDIR/default/app.conf" || sed -i '/^\[triggers\]/a reload.ucc_app_builder_settings = simple' "$APPDIR/default/app.conf"
 else
-  printf '\n[triggers]\nreload.ucc_app_builder_settings = simple\nreload.tools = simple\n' >> "$APPDIR/default/app.conf"
+  printf '\n[triggers]\nreload.ucc_app_builder_settings = simple\n%s\n' "$RELOAD_TOOLS" >> "$APPDIR/default/app.conf"
 fi
 #  - check_for_compiled_python: strip __pycache__ / *.pyc from the WHOLE package (wheels in
 #    lib/, AND any bin/ bytecode left by local py_compile checks — AppInspect fails on either).

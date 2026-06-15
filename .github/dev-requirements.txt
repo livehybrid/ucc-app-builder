@@ -1,0 +1,16 @@
+# Pinned Splunk dev toolchain for the DETERMINISTIC loop-smoke CI gate.
+#
+# Why pinned: loop-smoke proves the agentic loop reaches AppInspect-CLEAN with NO LLM,
+# so its result must be reproducible. A ucc-gen / splunk-appinspect release can change
+# generated files or check outcomes and flip the gate red on an unrelated day - so the
+# version is pinned here and bumped deliberately.
+#
+# How updates flow: Dependabot (pip ecosystem, .github/dev-requirements.txt) opens a PR
+# when a newer release ships; the loop-smoke job runs against the bump and must still
+# reach CLEAN before the PR can merge. The other CI jobs (splunk-app, splunk-integration,
+# licenses) intentionally float to the latest ucc-gen (>=) so they always compat-test the
+# newest release on every run.
+#
+# Validated CLEAN locally on both the config-only and input-bearing fixtures at these pins.
+splunk-add-on-ucc-framework==6.5.1
+splunk-appinspect==4.2.1

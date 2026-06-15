@@ -12,6 +12,11 @@ import {
   type DashboardSpec,
   type SavedSearchSpec,
 } from '../../src/lib/splunkArtifacts.js';
+import {
+  buildPytestScaffold,
+  type PytestScaffoldSpec,
+  type SourcetypeTestSpec,
+} from '../../src/lib/pytestScaffold.js';
 
 const router = Router();
 
@@ -70,6 +75,22 @@ router.post('/generate/savedsearch', (req: Request, res: Response) => {
     res.json({ ok: true, stanza, path: 'package/default/savedsearches.conf' });
   } catch (e) {
     res.status(500).json({ ok: false, error: (e as Error).message });
+  }
+});
+
+router.post('/generate/tests', (req: Request, res: Response) => {
+  const addonName = String(req.body?.addonName ?? '').trim();
+  const sourcetypes = asArray(req.body?.sourcetypes) as SourcetypeTestSpec[];
+  if (!addonName || sourcetypes.length === 0) {
+    return res
+      .status(400)
+      .json({ ok: false, error: 'addonName and a non-empty sourcetypes[] are required' });
+  }
+  try {
+    const { files } = buildPytestScaffold({ addonName, sourcetypes } as PytestScaffoldSpec);
+    res.json({ ok: true, files });
+  } catch (e) {
+    res.status(400).json({ ok: false, error: (e as Error).message });
   }
 });
 

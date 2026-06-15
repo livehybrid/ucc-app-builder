@@ -1,7 +1,7 @@
 import '@testing-library/jest-dom';
 import { vi } from 'vitest';
 
-// Keep test runs from polluting the real agent trace directory — the SSE route
+// Keep test runs from polluting the real agent trace directory - the SSE route
 // now traces every chat run, including the ones the route tests drive.
 process.env.TRACE_DIR = '.tmp/test-traces';
 

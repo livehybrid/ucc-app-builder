@@ -214,7 +214,7 @@ scopes = ${oauthAccount.oauth.scope || ''}
 
   // 12. Generate requirements.txt template.
   // ucc-gen REQUIRES splunktaucclib (>=6.6.0) in package/lib/requirements.txt
-  // whenever the add-on has a UI (configuration/inputs pages) — the build hard-
+  // whenever the add-on has a UI (configuration/inputs pages) - the build hard-
   // fails otherwise ("This add-on has an UI, so the splunktaucclib is required").
   // Inputs, accounts and REST endpoints all imply a UI here, so seed it.
   const needsUccLib =
@@ -303,7 +303,7 @@ export function generateAppManifest(metadata: AppMetadata): object {
  * The metadata fields a UCC globalConfig.json carries under `meta`. Used to derive
  * a valid package/app.manifest when one was never authored (the deterministic
  * manifest guard in the agent loop). `ucc-gen` does NOT generate app.manifest, so
- * a build fails outright without it — we synthesise it from globalConfig instead
+ * a build fails outright without it - we synthesise it from globalConfig instead
  * of relying on the flaky LLM "create the manifest" path.
  */
 export interface GlobalConfigMetaLike {
@@ -552,7 +552,7 @@ if __name__ == '__main__':
 /**
  * Generate the helper file for a modular input (user-customizable)
  */
-function generateInputHelperScript(inputName: string): string {
+export function generateInputHelperScript(inputName: string): string {
   return `# encoding = utf-8
 """
 This module is the helper for the ${inputName} modular input.

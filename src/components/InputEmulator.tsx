@@ -1,5 +1,5 @@
 /**
- * Input Emulator UI — fill an input's params + account/credential values, then run the
+ * Input Emulator UI - fill an input's params + account/credential values, then run the
  * generated collection logic (server-side, real HTTP, no install) and see the events it
  * would index. The "understand the data first" step before authoring props/transforms.
  */
@@ -12,6 +12,7 @@ import Switch from '@splunk/react-ui/Switch';
 import Message from '@splunk/react-ui/Message';
 import WaitSpinner from '@splunk/react-ui/WaitSpinner';
 import type { VirtualFileSystem } from '../lib/vfs';
+import { generateInputHelperScript } from '../lib/generator';
 
 const API_BASE =
   (window as unknown as { __UCC_API_BASE__?: string }).__UCC_API_BASE__ || '/api';
@@ -38,15 +39,71 @@ interface Props {
   vfs: VirtualFileSystem;
 }
 
-/** Discover input helper files in the VFS: `…/package/bin/<input>_helper.py`. */
-function discoverInputs(vfs: VirtualFileSystem): Array<{ name: string; path: string }> {
-  return vfs
-    .getAllFiles()
-    .filter((f) => /\/package\/bin\/[^/]+_helper\.py$/.test(f.path))
-    .map((f) => ({
-      name: (f.path.split('/').pop() || '').replace(/_helper\.py$/, ''),
-      path: f.path,
-    }));
+interface DiscoveredInput {
+  name: string;
+  /** Path to the input's helper .py, or null when only declared in globalConfig (barebones). */
+  path: string | null;
+  hasHelper: boolean;
+}
+
+/**
+ * Discover inputs to emulate: real helper files (`…/package/bin/<input>_helper.py`) UNION the
+ * inputs declared in globalConfig.json. The latter lets a barebones project (only
+ * globalConfig.json - the agent authored it but the helper boilerplate isn't generated until
+ * build) still be tested: we run a generated skeleton for those.
+ */
+/** A bin/*.py file counts as collection code if it defines a collect_events/stream_events. */
+const COLLECTION_FN = /\bdef\s+(?:collect_events|stream_events)\b/;
+
+function discoverInputs(vfs: VirtualFileSystem): DiscoveredInput[] {
+  const files = vfs.getAllFiles();
+  const byName = new Map<string, DiscoveredInput>();
+  // 1. AOB/UCC helper files: package/bin/<input>_helper.py.
+  for (const f of files) {
+    if (/\/package\/bin\/[^/]+_helper\.py$/.test(f.path)) {
+      const name = (f.path.split('/').pop() || '').replace(/_helper\.py$/, '');
+      byName.set(name, { name, path: f.path, hasHelper: true });
+    }
+  }
+  try {
+    const gc = files.find((f) => f.path.endsWith('globalConfig.json'));
+    if (gc) {
+      for (const svc of (JSON.parse(gc.content)?.pages?.inputs?.services ?? []) as Array<{
+        name?: unknown;
+      }>) {
+        const name = svc?.name ? String(svc.name) : '';
+        if (!name || byName.has(name)) continue;
+        // 2. The input's OWN script: package/bin/<input>.py with a collection function. The
+        //    agent often writes the modular input as <input>.py (a Script subclass or a
+        //    module-level stream_events) rather than the _helper.py boilerplate - recognise
+        //    it as real collection code instead of falsely reporting "barebones".
+        const script = files.find(
+          (f) =>
+            f.path.endsWith(`/package/bin/${name}.py`) && COLLECTION_FN.test(f.content || '')
+        );
+        if (script) byName.set(name, { name, path: script.path, hasHelper: true });
+        else byName.set(name, { name, path: null, hasHelper: false });
+      }
+    }
+  } catch {
+    /* ignore malformed globalConfig */
+  }
+  return [...byName.values()];
+}
+
+/** The project's appId (globalConfig meta.name, else first path segment) - for writing a stub. */
+function appIdOf(vfs: VirtualFileSystem): string {
+  const files = vfs.getAllFiles();
+  const gc = files.find((f) => f.path.endsWith('globalConfig.json'));
+  if (gc) {
+    try {
+      const id = JSON.parse(gc.content)?.meta?.name;
+      if (id) return String(id);
+    } catch {
+      /* fall through */
+    }
+  }
+  return files[0] ? files[0].path.replace(/^\/+/, '').split('/')[0] : 'TA_app';
 }
 
 /** Best-effort: seed arg names from globalConfig (the input's entity fields + account fields). */
@@ -72,7 +129,10 @@ function seedArgNames(vfs: VirtualFileSystem, inputName: string): string[] {
 }
 
 export function InputEmulator({ open, onClose, vfs }: Props) {
-  const inputs = useMemo(() => discoverInputs(vfs), [vfs]);
+  // `vfs` is a STABLE instance (App holds it in useState and mutates it in place, bumping a
+  // separate version counter), so we cannot depend on its identity to re-discover. Re-run
+  // discovery each time the modal opens so inputs authored after first mount are found.
+  const inputs = useMemo(() => (open ? discoverInputs(vfs) : []), [vfs, open]);
   const [selected, setSelected] = useState('');
   const [argRows, setArgRows] = useState<Array<{ name: string; value: string }>>([]);
   const [index, setIndex] = useState('main');
@@ -92,10 +152,29 @@ export function InputEmulator({ open, onClose, vfs }: Props) {
   const setRow = (i: number, patch: Partial<{ name: string; value: string }>) =>
     setArgRows((prev) => prev.map((r, idx) => (idx === i ? { ...r, ...patch } : r)));
 
+  const selectedInput = inputs.find((i) => i.name === selected);
+  const usingStub = !!selectedInput && !selectedInput.hasHelper;
+
+  /** Add a starter helper for a globalConfig-only input to the project so it persists. */
+  const addStarterHelper = () => {
+    if (!selectedInput) return;
+    vfs.writeFile(
+      `${appIdOf(vfs)}/package/bin/${selectedInput.name}_helper.py`,
+      generateInputHelperScript(selectedInput.name),
+      'generated'
+    );
+    onClose();
+  };
+
   const run = async () => {
     const input = inputs.find((i) => i.name === selected);
     if (!input) return;
-    const helperCode = vfs.getAllFiles().find((f) => f.path === input.path)?.content || '';
+    // Use the real helper when present; for a barebones input (declared in globalConfig but
+    // no helper yet) run a generated SKELETON so the harness has something to execute (it
+    // logs and emits no events until collection logic is written).
+    const helperCode = input.path
+      ? vfs.getAllFiles().find((f) => f.path === input.path)?.content || ''
+      : generateInputHelperScript(input.name);
     const args: Record<string, string> = { __input_name__: selected };
     for (const r of argRows) if (r.name.trim()) args[r.name.trim()] = r.value;
     setRunning(true);
@@ -119,17 +198,18 @@ export function InputEmulator({ open, onClose, vfs }: Props) {
 
   return (
     <Modal open={open} onRequestClose={onClose} style={{ width: 780, maxWidth: '94%' }} returnFocus={() => {}}>
-      <Modal.Header title="Test Input — emulate stream_events" />
+      <Modal.Header title="Test Input - emulate stream_events" />
       <Modal.Body>
         <Message type="info" style={{ marginBottom: 12 }}>
           Runs the input's collection code with the values you provide (real HTTP, no install)
-          and shows the events it would index — so you can see the data before writing
+          and shows the events it would index - so you can see the data before writing
           props/transforms.
         </Message>
 
         {inputs.length === 0 ? (
           <p style={{ color: '#9b9ea3' }}>
-            No input helpers found. Build an add-on with a modular input first.
+            No modular inputs found. Author <code>globalConfig.json</code> with an input (via the
+            wizard or the AI), then come back to test it.
           </p>
         ) : (
           <>
@@ -147,6 +227,21 @@ export function InputEmulator({ open, onClose, vfs }: Props) {
                 <Text value={index} onChange={(_e, { value }) => setIndex(value)} />
               </label>
             </div>
+
+            {selected && usingStub && (
+              <Message type="warning" style={{ marginBottom: 10 }}>
+                This input has no collection code yet (only declared in globalConfig.json). Running
+                it uses a generated skeleton - it logs but emits no events until you implement the
+                collection logic.
+                <div style={{ marginTop: 8 }}>
+                  <Button
+                    appearance="default"
+                    onClick={addStarterHelper}
+                    label={`Add starter helper for ${selected}`}
+                  />
+                </div>
+              </Message>
+            )}
 
             {selected && (
               <>
@@ -205,7 +300,7 @@ export function InputEmulator({ open, onClose, vfs }: Props) {
                   {result.count} event{result.count === 1 ? '' : 's'} captured
                   {result.truncated ? ' (truncated)' : ''}.
                 </Message>
-                <pre style={{ maxHeight: 240, overflow: 'auto', background: '#1e1e1e', padding: 10, borderRadius: 6, fontSize: '0.78rem' }}>
+                <pre style={{ maxHeight: 240, overflow: 'auto', background: '#1e1e1e', color: '#e8e8e8', padding: 10, borderRadius: 6, fontSize: '0.78rem' }}>
                   {(result.events || []).map((e, i) => `# event ${i + 1} (sourcetype=${e.sourcetype || ''}, index=${e.index || ''})\n${e.data}`).join('\n\n')}
                 </pre>
                 {result.logs && result.logs.length > 0 && (

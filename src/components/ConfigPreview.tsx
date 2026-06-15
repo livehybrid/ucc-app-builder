@@ -3,7 +3,7 @@
  *
  * Renders the Configuration tabs, Inputs page and Alert forms with the same
  * component library the real UCC UI uses (@splunk/react-ui), and evaluates the
- * declared validators as the user types — so a regex or range mistake is
+ * declared validators as the user types - so a regex or range mistake is
  * caught here, before a build is ever run. Entirely client-side; no cost.
  */
 import { useMemo, useState } from 'react';
@@ -53,7 +53,7 @@ const Body = styled.div`
 `;
 
 /* The built app exposes Inputs/Configuration/Dashboard as views in the Splunk
- * app NAVIGATION BAR (default/data/ui/nav), not as tabs inside a page — mirror
+ * app NAVIGATION BAR (default/data/ui/nav), not as tabs inside a page - mirror
  * that chrome so the preview reads like the real app. */
 const NavBar = styled.div`
   display: flex;
@@ -101,7 +101,7 @@ function optionItems(entity: PreviewEntity): OptionItem[] {
     if (!item || typeof item !== 'object') continue;
     const rec = item as Record<string, unknown>;
     if (Array.isArray(rec.children)) {
-      // Grouped options — flatten with the group prefix for the preview.
+      // Grouped options - flatten with the group prefix for the preview.
       for (const child of rec.children as Array<Record<string, unknown>>) {
         out.push({
           value: String(child.value ?? ''),
@@ -236,7 +236,7 @@ function EntityField({
       control = (
         <Message type="info">
           OAuth flow (
-          {String((entity.options?.auth_type as string[] | undefined)?.join(', ') ?? 'oauth')}) —
+          {String((entity.options?.auth_type as string[] | undefined)?.join(', ') ?? 'oauth')}) -
           rendered fully at runtime in Splunk.
         </Message>
       );
@@ -255,7 +255,7 @@ function EntityField({
       );
       break;
     case 'custom':
-      control = <Message type="info">Custom component — rendered at runtime.</Message>;
+      control = <Message type="info">Custom component - rendered at runtime.</Message>;
       break;
     default:
       // text, interval, and anything unrecognized fall back to a text input.
@@ -271,7 +271,7 @@ function EntityField({
   const help =
     error ??
     entity.help ??
-    (entity.type === 'index' ? 'Live index list at runtime — sample values shown.' : undefined);
+    (entity.type === 'index' ? 'Live index list at runtime - sample values shown.' : undefined);
 
   return (
     <ControlGroup
@@ -352,7 +352,7 @@ function InputsPage({ model }: { model: PreviewModel }) {
     return <Message type="info">No inputs defined in globalConfig.json yet.</Message>;
   }
 
-  const cell = (v: unknown) => (v === undefined || v === null || v === '' ? '—' : String(v));
+  const cell = (v: unknown) => (v === undefined || v === null || v === '' ? '-' : String(v));
 
   return (
     <div>
@@ -416,8 +416,8 @@ function InputsPage({ model }: { model: PreviewModel }) {
               <Table.Row>
                 <Table.Cell colSpan={6}>
                   <Muted>
-                    No inputs created — use “Create New Input” to preview each input form. Added
-                    inputs appear here (preview only — not saved to the app).
+                    No inputs created - use “Create New Input” to preview each input form. Added
+                    inputs appear here (preview only - not saved to the app).
                   </Muted>
                 </Table.Cell>
               </Table.Row>
@@ -464,7 +464,7 @@ function ConfigurationPage({ model }: { model: PreviewModel }) {
                 <Table.Body>
                   <Table.Row>
                     <Table.Cell colSpan={tab.table.header.length}>
-                      <Muted>Entries appear here — the form below is the “Add” dialog.</Muted>
+                      <Muted>Entries appear here - the form below is the “Add” dialog.</Muted>
                     </Table.Cell>
                   </Table.Row>
                 </Table.Body>
@@ -531,7 +531,7 @@ export function ConfigPreview({ configJson }: { configJson: string | null }) {
   if (!configJson) {
     return (
       <Message type="warning">
-        No globalConfig.json found in the project — generate or import an app first.
+        No globalConfig.json found in the project - generate or import an app first.
       </Message>
     );
   }
@@ -547,7 +547,7 @@ export function ConfigPreview({ configJson }: { configJson: string | null }) {
   return (
     <div>
       <Message type="info" style={{ marginBottom: 12 }}>
-        Preview of the UI <strong>ucc-gen</strong> will generate — fields, tabs and validators are
+        Preview of the UI <strong>ucc-gen</strong> will generate - fields, tabs and validators are
         live (type to test them). Data is not saved. The dark bar mirrors the built app&apos;s
         navigation (default/data/ui/nav).
       </Message>
@@ -596,7 +596,7 @@ export function ConfigPreview({ configJson }: { configJson: string | null }) {
               )}
               {activeView === 'dashboard' && (
                 <Message type="info">
-                  Monitoring dashboard — generated by ucc-gen at build time.
+                  Monitoring dashboard - generated by ucc-gen at build time.
                 </Message>
               )}
             </Body>
@@ -604,7 +604,7 @@ export function ConfigPreview({ configJson }: { configJson: string | null }) {
         ) : (
           <Body>
             <Message type="info">
-              No pages defined yet — add an inputs page, configuration tabs, alerts or a dashboard
+              No pages defined yet - add an inputs page, configuration tabs, alerts or a dashboard
               to globalConfig.json to preview them here.
             </Message>
           </Body>

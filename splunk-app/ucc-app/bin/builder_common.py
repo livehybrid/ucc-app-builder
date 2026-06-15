@@ -33,7 +33,7 @@ def derive_app_id(name):
 def to_safe_project_path(app_id, p):
     """
     Confine a caller path to the project subtree. Returns '<app_id>/<path>' or
-    None if absolute, contains '.'/'..'/'' segment, backslash or NUL — so the AI
+    None if absolute, contains '.'/'..'/'' segment, backslash or NUL - so the AI
     agent can never escape the project (mirrors server/mcp/core.ts).
     """
     if not isinstance(p, str) or p == '':
@@ -103,7 +103,7 @@ class KVProjectStore:
 
     def reset(self, app_id, version):
         # Clear this session's rows, then write meta. The _key contains '/' (project
-        # paths) so it MUST be URL-encoded in the DELETE path — otherwise the '/' is
+        # paths) so it MUST be URL-encoded in the DELETE path - otherwise the '/' is
         # treated as a path separator, the DELETE 404s, and stale files from prior
         # projects accumulate (which then break the build with nested garbage).
         from urllib.parse import quote
@@ -159,46 +159,16 @@ class KVProjectStore:
                 for r in self._query() if r.get('path') and r.get('path') != '__meta__']
 
 
-def get_sidecar_url(session_key, app='ucc_app_builder'):
-    """Read the configured Node build-engine URL from the app's config conf."""
-    try:
-        _, body = rest.simpleRequest(
-            f'/servicesNS/nobody/{app}/configs/conf-ucc_app_builder_settings/build_engine?output_mode=json',
-            sessionKey=session_key, method='GET', raiseAllErrors=False)
-        entry = json.loads(body).get('entry', [])
-        if entry:
-            return entry[0].get('content', {}).get('url')
-    except Exception:
-        pass
-    return None
-
-
-def sidecar_call(path, payload, session_key):
-    """POST to the Node build engine. Returns (result_dict, error_str)."""
-    import ssl
-    import urllib.request
-    base = get_sidecar_url(session_key)
-    if not base:
-        return None, 'sidecar URL not configured'
-    try:
-        req = urllib.request.Request(
-            base.rstrip('/') + path,
-            data=json.dumps(payload).encode('utf-8'),
-            headers={'Content-Type': 'application/json'}, method='POST')
-        ctx = ssl.create_default_context()
-        ctx.check_hostname = False
-        ctx.verify_mode = ssl.CERT_NONE
-        with urllib.request.urlopen(req, timeout=300, context=ctx) as resp:
-            return json.loads(resp.read().decode('utf-8')), None
-    except Exception as e:  # noqa: BLE001
-        return None, str(e)
+# (Removed get_sidecar_url / sidecar_call - the build engine, artifact generators and AI
+# proxy now run natively in Splunk's python; see builder_build.py / builder_generators.py /
+# builder_llm.py / builder_api.py. The app no longer depends on a Node sidecar.)
 
 
 APPS_COLLECTION = 'ucc_builder_apps'
 
 
 class KVAppLibrary:
-    """Saved add-on projects ('My Apps') — one KV row per (user, appId), each holding the
+    """Saved add-on projects ('My Apps') - one KV row per (user, appId), each holding the
     project's authored source files as a JSON blob. Lets a user save, list, resume and
     delete multiple add-ons across sessions/devices (server-side, unlike the SPA's
     single-state localStorage)."""
@@ -276,3 +246,115 @@ class KVAppLibrary:
             return True
         except Exception:
             return False
+
+
+TRACES_COLLECTION = 'ucc_agent_traces'
+_TRACE_MAX_EVENTS = 400
+_TRACE_MAX_FIELD = 4000
+
+
+def _truncate(s, limit):
+    s = '' if s is None else str(s)
+    return s if len(s) <= limit else s[:limit] + '…'
+
+
+class KVAgentTraces:
+    """Durable record of Splunk Agent SDK (splunklib.ai) chat runs - one KV row per run,
+    holding the full progress trace (assistant / tool_call / tool_result events) plus
+    metadata, so a run survives the per-job file's TTL prune and can be reviewed, debugged
+    or fed to eval after the fact. Persisted by advisor_runner.py at terminal; listed/read
+    by builder_agent.py (agent_traces / agent_trace)."""
+
+    def __init__(self, session_key, app, user=None):
+        self.sk = session_key
+        self.app = app
+        self.user = user
+        self.base = f'/servicesNS/nobody/{app}/storage/collections/data/{TRACES_COLLECTION}'
+
+    def _uid(self):
+        if self.user:
+            safe = ''.join(c if (c.isalnum() or c in '_-') else '_' for c in str(self.user))
+            return ('u_' + safe)[:80]
+        return str(abs(hash(self.sk)) % (10 ** 12))
+
+    def save(self, job_id, meta, events):
+        """Persist one run. `events` is the list of trace event dicts; it is capped and
+        each event's large text fields are truncated to keep the KV document bounded."""
+        capped = events[-_TRACE_MAX_EVENTS:] if isinstance(events, list) else []
+        slim = []
+        for ev in capped:
+            if not isinstance(ev, dict):
+                continue
+            e = dict(ev)
+            for k in ('content', 'result', 'answer', 'trace', 'args'):
+                if k in e:
+                    e[k] = _truncate(e[k] if isinstance(e[k], str) else json.dumps(e[k], default=str),
+                                     _TRACE_MAX_FIELD)
+            slim.append(e)
+        doc = {
+            '_key': str(job_id),
+            'uid': self._uid(),
+            'job_id': str(job_id),
+            'created_at': time.time(),
+            'model': str(meta.get('model') or ''),
+            'provider': str(meta.get('provider') or ''),
+            'status': str(meta.get('status') or ''),
+            'prompt': _truncate(meta.get('prompt'), _TRACE_MAX_FIELD),
+            'answer': _truncate(meta.get('answer'), _TRACE_MAX_FIELD),
+            'error': _truncate(meta.get('error'), _TRACE_MAX_FIELD),
+            'step_count': int(meta.get('step_count') or 0),
+            'event_count': len(events) if isinstance(events, list) else 0,
+            'events': json.dumps(slim, default=str),
+        }
+        # Existence check in its OWN try/except: a GET on a not-yet-existing key can raise
+        # (KV 404), and that must NOT abort the write below - otherwise no run ever persists
+        # (every job_id is new). This mirrors KVAppLibrary._get's isolation.
+        url = f'{self.base}/{job_id}'
+        exists = False
+        try:
+            _, body = rest.simpleRequest(url, sessionKey=self.sk, method='GET',
+                                         raiseAllErrors=False)
+            doc_existing = json.loads(body)
+            exists = isinstance(doc_existing, dict) and '_key' in doc_existing
+        except Exception:
+            exists = False
+        try:
+            if exists:
+                rest.simpleRequest(url, sessionKey=self.sk, method='POST',
+                                   jsonargs=json.dumps(doc), raiseAllErrors=False)
+            else:
+                rest.simpleRequest(self.base, sessionKey=self.sk, method='POST',
+                                   jsonargs=json.dumps(doc), raiseAllErrors=False)
+            return True
+        except Exception:
+            return False
+
+    def list(self, limit=50):
+        try:
+            q = json.dumps({'uid': self._uid()})
+            url = (f'{self.base}?query={q}&count={int(limit)}'
+                   '&fields=job_id,created_at,model,provider,status,prompt,step_count,event_count'
+                   '&sort=-created_at')
+            _, body = rest.simpleRequest(url, sessionKey=self.sk, method='GET',
+                                         raiseAllErrors=False)
+            rows = json.loads(body)
+            return rows if isinstance(rows, list) else []
+        except Exception:
+            return []
+
+    def get(self, job_id):
+        try:
+            from urllib.parse import quote
+            url = f'{self.base}/{quote(str(job_id), safe="")}'
+            _, body = rest.simpleRequest(url, sessionKey=self.sk, method='GET',
+                                         raiseAllErrors=False)
+            doc = json.loads(body)
+            if not (isinstance(doc, dict) and '_key' in doc):
+                return None
+            try:
+                doc['events'] = json.loads(doc.get('events') or '[]')
+            except (ValueError, TypeError):
+                doc['events'] = []
+            return doc
+        except Exception:
+            return None

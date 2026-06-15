@@ -3,14 +3,14 @@ import { Tool, validateWritePath, requireStringArg } from '../toolTypes';
 export const writeFile: Tool = {
   name: 'write_file',
   description:
-    'Write content to a file in the app source. Paths start with the app id (use the exact paths list_files shows). App contents live under <appId>/package/ (app.manifest, bin/, default/, lib/, …). The one exception is globalConfig.json, which MUST live at the project root (a sibling of package/, NOT inside it — e.g. "<appId>/globalConfig.json") — that is where ucc-gen reads it. Use this to create new files or modify existing ones.',
+    'Write content to a file in the app source. Paths start with the app id (use the exact paths list_files shows). App contents live under <appId>/package/ (app.manifest, bin/, default/, lib/, …). The one exception is globalConfig.json, which MUST live at the project root (a sibling of package/, NOT inside it - e.g. "<appId>/globalConfig.json") - that is where ucc-gen reads it. Use this to create new files or modify existing ones.',
   parameters: {
     type: 'object',
     properties: {
       path: {
         type: 'string',
         description:
-          'The file path, starting with the app id — e.g. "<appId>/package/bin/input.py", or "<appId>/globalConfig.json" for the root config.',
+          'The file path, starting with the app id - e.g. "<appId>/package/bin/input.py", or "<appId>/globalConfig.json" for the root config.',
       },
       content: { type: 'string', description: 'The full content to write' },
     },

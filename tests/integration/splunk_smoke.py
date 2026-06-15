@@ -130,6 +130,89 @@ def main():
     check("ai_config save ok", d.get("ok") is True, str(d))
     check("ai_config saved model", (d.get("settings") or {}).get("ai_model") == "anthropic/claude-sonnet-4.6", str(d))
 
+    # 9) My Apps (KV-backed multi-project library): save -> list -> load round-trips
+    #    files -> delete -> gone. Pure KV, no Node engine / no LLM — fully deterministic.
+    files = [{"path": "ta_ci_smoke/globalConfig.json", "content": gc},
+             {"path": "ta_ci_smoke/README.md", "content": "# CI Smoke\n"}]
+    d = _call(sk, "save_app", {"appId": "ta_ci_smoke", "name": "CI Smoke", "version": "1.0.0", "files": files})
+    check("save_app ok", d.get("ok") is True, str(d))
+    check("save_app fileCount", d.get("fileCount") == 2, str(d))
+
+    d = _call(sk, "list_apps", {})
+    check("list_apps ok", d.get("ok") is True, str(d))
+    check("list_apps contains saved app",
+          "ta_ci_smoke" in [a.get("appId") for a in (d.get("apps") or [])], str(d)[:300])
+
+    d = _call(sk, "load_app", {"appId": "ta_ci_smoke"})
+    check("load_app found", d.get("found") is True, str(d)[:200])
+    loaded_paths = [f.get("path") for f in (d.get("files") or [])]
+    check("load_app round-trips files", "ta_ci_smoke/README.md" in loaded_paths, str(loaded_paths)[:300])
+
+    d = _call(sk, "delete_app", {"appId": "ta_ci_smoke"})
+    check("delete_app ok", d.get("ok") is True, str(d))
+    d = _call(sk, "load_app", {"appId": "ta_ci_smoke"})
+    check("deleted app is gone", (d.get("_http_error") == 404) or (d.get("found") is False), str(d)[:200])
+
+    # 10) Splunk Agent SDK chat surface (splunklib.ai), deterministic paths only — no LLM:
+    #     - agent_start with NO key configured -> 400 "No API key" (proves the endpoint is
+    #       wired + the config resolver runs, and that it refuses to spawn without a key).
+    d = _call(sk, "agent_start", {"prompt": "hello"})
+    check("agent_start without key -> 400", d.get("_http_error") == 400, str(d)[:300])
+    check("agent_start error mentions API key", "API key" in (d.get("_body") or ""), str(d)[:300])
+
+    #     - agent_poll on an unknown job -> 404, running False (never hangs the UI).
+    d = _call(sk, "agent_poll", {"job_id": "deadbeef", "cursor": 0})
+    check("agent_poll unknown job -> 404", d.get("_http_error") == 404, str(d)[:300])
+
+    #     - agent_cancel on an unknown job -> 404 cancelled False (the new Stop endpoint is
+    #       registered and degrades safely when there is nothing to kill).
+    d = _call(sk, "agent_cancel", {"job_id": "deadbeef"})
+    check("agent_cancel unknown job -> 404", d.get("_http_error") == 404, str(d)[:300])
+    #     - agent_cancel with a malformed job id -> 400 (input validation).
+    d = _call(sk, "agent_cancel", {"job_id": "../../etc"})
+    check("agent_cancel rejects bad job id -> 400", d.get("_http_error") == 400, str(d)[:300])
+
+    #     - agent_traces (durable run history) lists for this user (empty on a fresh KV is
+    #       fine) and agent_trace on an unknown job -> 404 found:false.
+    d = _call(sk, "agent_traces", {})
+    check("agent_traces ok", d.get("ok") is True and isinstance(d.get("traces"), list), str(d)[:300])
+    d = _call(sk, "agent_trace", {"job_id": "deadbeef"})
+    check("agent_trace unknown job -> 404", d.get("_http_error") == 404, str(d)[:300])
+
+    # 11) Dashboard generator handler is reachable inside splunkd and degrades cleanly when
+    #     the Node engine sidecar isn't configured (the integration container has none): it
+    #     must return a JSON error (400), NEVER a 500/crash — proving the handler imports and
+    #     runs. (Full generation is covered hermetically by server/routes/generate.test.ts.)
+    d = _call(sk, "generate_dashboard", {"title": "CI", "panels": [{"title": "p", "spl": "index=_internal", "viz": "table"}]})
+    reachable = (d.get("ok") is True) or (d.get("_http_error") == 400)
+    check("generate_dashboard reachable (no 500)", reachable, str(d)[:300])
+
+    # 12) Seed from installed: the app lists itself (it has a globalConfig.json) and its source
+    #     imports back — excluding vendored libs / bytecode — with path-traversal blocked.
+    d = _call(sk, "list_installed_apps", {})
+    check("list_installed_apps ok", d.get("ok") is True, str(d)[:200])
+    check("list_installed_apps includes self",
+          APP in [a.get("appId") for a in (d.get("apps") or [])], str(d)[:300])
+
+    d = _call(sk, "import_installed_app", {"appId": APP})
+    check("import_installed_app ok", d.get("ok") is True, str(d)[:200])
+    paths = [f.get("path") for f in (d.get("files") or [])]
+    # A BUILT add-on keeps globalConfig.json under appserver/static/js/build; the import
+    # surfaces it at the PROJECT ROOT so the seed is a normal UCC source project.
+    check("import surfaces globalConfig at root", f"{APP}/globalConfig.json" in paths, str(paths)[:300])
+    check("import includes app.conf", f"{APP}/default/app.conf" in paths, str(paths)[:300])
+    check("import includes bin source", any(p.startswith(f"{APP}/bin/") for p in paths), str(paths)[:300])
+    check("import excludes vendored lib", not any("/lib/" in p for p in paths), str(paths)[:300])
+    check("import excludes bytecode", not any(p.endswith(".pyc") for p in paths), str(paths)[:200])
+    # No duplicate deep appserver copy of globalConfig.
+    check("import has no appserver globalConfig dup",
+          not any("appserver" in p and p.endswith("globalConfig.json") for p in paths), str(paths)[:300])
+
+    d = _call(sk, "import_installed_app", {"appId": "../etc"})
+    check("import rejects path traversal -> 400", d.get("_http_error") == 400, str(d)[:200])
+    d = _call(sk, "import_installed_app", {"appId": "no_such_app_xyz"})
+    check("import unknown app -> 404", d.get("_http_error") == 404, str(d)[:200])
+
     print(f"\nAll {_passed} checks passed.")
 
 

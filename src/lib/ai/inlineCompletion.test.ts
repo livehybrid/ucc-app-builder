@@ -38,4 +38,20 @@ describe('cleanCompletion', () => {
   it('returns plain text unchanged when there is nothing to clean', () => {
     expect(cleanCompletion('= 300', 'interval ')).toBe('= 300');
   });
+
+  it('cuts at a leaked complete framing tag (drops the echo after it)', () => {
+    expect(cleanCompletion('main</PREFIX><SUFFIX>foo', '')).toBe('main');
+    expect(cleanCompletion('value</SUFFIX>', '')).toBe('value');
+  });
+
+  it('strips a trailing truncated framing tag (max_tokens cut it mid-tag)', () => {
+    expect(cleanCompletion('{input_name</', '')).toBe('{input_name');
+    expect(cleanCompletion('sourcetype = x</PREF', '')).toBe('sourcetype = x');
+    expect(cleanCompletion('done<SUFFI', '')).toBe('done');
+  });
+
+  it('does NOT over-trim a legitimate trailing < comparison', () => {
+    expect(cleanCompletion('if x < 5', '')).toBe('if x < 5');
+    expect(cleanCompletion('a <= b', '')).toBe('a <= b');
+  });
 });
