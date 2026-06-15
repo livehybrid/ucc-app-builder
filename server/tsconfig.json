@@ -17,6 +17,7 @@
     "../src/lib/ai/modelProfile.ts",
     "../src/lib/vfs.ts",
     "../src/lib/generator.ts",
+    "../src/lib/splunkArtifacts.ts",
     "../src/lib/imageUtils.ts",
     "../src/types/app.ts",
     "../src/types/components.ts",

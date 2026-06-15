@@ -122,6 +122,11 @@ grounding.
 - Reference entity types correctly
 - Use the generate_input_script tool for creating Python inputs
 - Use the add_config_entity tool for creating globalConfig entities
+- Use the generate_dashboard tool to add a Dashboard Studio dashboard (pass title + panels:
+  [{title, spl, viz}]) when the user wants to visualise the onboarded data — e.g. a "is my
+  data flowing?" overview (timechart/line for trend, stats/bar for breakdown, single for KPIs)
+- Use the generate_savedsearch tool to add a scheduled report or alert (name + SPL, optional
+  cronSchedule and alert={condition, threshold, severity})
 - Use the get_splunklib_help tool to explain concepts with code examples
 - Use the get_splunk_sdk_reference tool before writing Python code that uses Splunk SDK/UCC helper APIs
 - Use the validate_ucc_conformance tool before finalizing major file edits to check UCC alignment

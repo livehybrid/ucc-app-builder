@@ -90,6 +90,22 @@ def _store(ctx: ToolContext) -> "builder_common.KVProjectStore":
     return KV(_session_key(ctx), app=APP, user=_username(ctx))
 
 
+def _build_model(session_key: str) -> str:
+    """The build-loop fixer model from the Configuration → AI Provider tab (build_model)."""
+    try:
+        import json as _json
+        import splunk.rest as rest
+        _, body = rest.simpleRequest(
+            f"/servicesNS/nobody/{APP}/configs/conf-ucc_app_builder_settings/ai_provider?output_mode=json",
+            sessionKey=session_key, method="GET", raiseAllErrors=False)
+        entry = _json.loads(body).get("entry", [])
+        if entry:
+            return entry[0].get("content", {}).get("build_model") or ""
+    except Exception:
+        pass
+    return ""
+
+
 @registry.tool(name="create_addon", tags=["ucc_builder"])
 def create_addon(ctx: ToolContext, name: str, version: str = "1.0.0") -> dict:
     """Start (or reset) a UCC add-on project. appId is derived (TA_<name>). Call first."""
@@ -144,10 +160,15 @@ def build_and_inspect(ctx: ToolContext, max_iterations: int = 4, include_warning
         _dbg("build_and_inspect", error="empty project")
         return {"error": "project is empty — author globalConfig.json first"}
     _dbg("build_and_inspect", phase="start", appId=store.app_id(), n=len(files), warn=include_warnings)
-    result, err = sidecar_call("/api/mcp/build_engine", {
+    sk = _session_key(ctx)
+    payload = {
         "appId": store.app_id(), "version": store.version(), "files": files,
         "maxIterations": max_iterations, "includeWarnings": bool(include_warnings),
-    }, _session_key(ctx))
+    }
+    fixer = _build_model(sk)
+    if fixer:
+        payload["fixerModel"] = fixer
+    result, err = sidecar_call("/api/mcp/build_engine", payload, sk)
     if err:
         _dbg("build_and_inspect", error=str(err))
         return {"error": f"build engine unavailable: {err}"}

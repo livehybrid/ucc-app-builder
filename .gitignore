@@ -44,3 +44,13 @@ memory/logs/
 
 # Agent loop trace sink (JSONL)
 .ucc-agent/
+
+# Built SPA bundle staged into the native Splunk app — a build artifact produced by
+# splunk-app/deploy/build_ui.sh (run automatically by build_agent_app.sh at package time).
+# Not committed: keeps the 3.8 MB minified blob out of git and prevents source/bundle drift.
+splunk-app/ucc-app/appserver/static/ui/app.js
+splunk-app/ucc-app/appserver/static/ui/app.css
+
+# Python bytecode (never commit / package)
+__pycache__/
+*.pyc

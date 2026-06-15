@@ -62,7 +62,8 @@ router.post('/mcp/dispatch', async (req: Request, res: Response) => {
  * based /mcp/:tool surface used by the standalone UI.
  */
 router.post('/mcp/build_engine', async (req: Request, res: Response) => {
-  const { appId, version, files, maxIterations, includeWarnings, package: pkg } = req.body ?? {};
+  const { appId, version, files, maxIterations, includeWarnings, fixerModel, package: pkg } =
+    req.body ?? {};
   if (!appId || !Array.isArray(files) || files.length === 0) {
     res.status(400).json({ error: 'appId and a non-empty files[] are required' });
     return;
@@ -76,6 +77,8 @@ router.post('/mcp/build_engine', async (req: Request, res: Response) => {
       files: files.map((f: { path: string; content: string }) => ({ path: f.path, content: f.content })),
       maxIterations: Number.isFinite(Number(maxIterations)) ? Number(maxIterations) : 4,
       includeWarnings: includeWarnings === undefined ? true : Boolean(includeWarnings),
+      // Build-loop fixer model from the Configuration → AI Provider tab (build_model).
+      fixerModel: fixerModel ? String(fixerModel) : undefined,
     });
     res.json({
       clean: result.clean,

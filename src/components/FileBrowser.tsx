@@ -7,6 +7,16 @@ import Modal from '@splunk/react-ui/Modal';
 import Text from '@splunk/react-ui/Text';
 import Menu from '@splunk/react-ui/Menu';
 import Badge from '@splunk/react-ui/Badge';
+import Switch from '@splunk/react-ui/Switch';
+import Select from '@splunk/react-ui/Select';
+import {
+  fetchCompletion,
+  inlineEnabled,
+  setInlineEnabled,
+  inlineModel,
+  COMPLETION_MODEL_STORAGE,
+  COMPLETION_MODEL_CHOICES,
+} from '../lib/ai/inlineCompletion';
 import { variables } from '@splunk/themes';
 import type { VirtualFileSystem } from '../lib/vfs';
 import type { VFSNode, VFSDirectory, VFSFile } from '../types/vfs';
@@ -182,6 +192,9 @@ export function FileBrowser({
 }: FileBrowserProps) {
   const [selectedPath, setSelectedPath] = useState<string | null>(null);
   const [expandedDirs, setExpandedDirs] = useState<Set<string>>(new Set(['/']));
+  // Inline (ghost-text) AI completion — opt-in (default OFF), persisted in localStorage.
+  const [aiComplete, setAiComplete] = useState<boolean>(() => inlineEnabled());
+  const [completeModel, setCompleteModel] = useState<string>(() => inlineModel());
   const [editedContent, setEditedContent] = useState<string | null>(null);
   const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false);
   const [contextMenu, setContextMenu] = useState<ContextMenuState>({
@@ -584,6 +597,59 @@ export function FileBrowser({
               { value: `${match.description}` },
             ],
           };
+        },
+      });
+
+      // Inline (ghost-text) AI completion. Registered once (global), gated at call time by
+      // the opt-in flag. Debounced + cancelled via Monaco's token; fetchCompletion caches
+      // and is fail-soft (returns '' — never throws into the editor).
+      monaco.languages.registerInlineCompletionsProvider(['splunk-conf', 'python', 'json'], {
+        provideInlineCompletions: async (
+          model: {
+            getOffsetAt: (p: { lineNumber: number; column: number }) => number;
+            getValue: () => string;
+            getLanguageId: () => string;
+          },
+          position: { lineNumber: number; column: number },
+          _ctx: unknown,
+          token: {
+            isCancellationRequested: boolean;
+            onCancellationRequested: (cb: () => void) => void;
+          }
+        ) => {
+          if (!inlineEnabled()) return { items: [] };
+          // Debounce: wait out a typing burst; bail if Monaco superseded this request.
+          await new Promise((r) => setTimeout(r, 350));
+          if (token.isCancellationRequested) return { items: [] };
+          const offset = model.getOffsetAt(position);
+          const full = model.getValue();
+          const controller = new AbortController();
+          token.onCancellationRequested(() => controller.abort());
+          const text = await fetchCompletion(
+            {
+              prefix: full.slice(0, offset),
+              suffix: full.slice(offset),
+              language: model.getLanguageId(),
+            },
+            controller.signal
+          );
+          if (!text || token.isCancellationRequested) return { items: [] };
+          return {
+            items: [
+              {
+                insertText: text,
+                range: new monaco.Range(
+                  position.lineNumber,
+                  position.column,
+                  position.lineNumber,
+                  position.column
+                ),
+              },
+            ],
+          };
+        },
+        freeInlineCompletions: () => {
+          /* nothing to dispose */
         },
       });
     }
@@ -1098,6 +1164,37 @@ export function FileBrowser({
         <Button appearance="default" onClick={() => handleNewFile('/')} label="New File" />
         <Button appearance="default" onClick={() => handleNewFolder('/')} label="New Folder" />
         <ToolbarSpacer />
+        <Switch
+          selected={aiComplete}
+          onClick={() => {
+            const next = !aiComplete;
+            setInlineEnabled(next);
+            setAiComplete(next);
+          }}
+          appearance="toggle"
+          title="Ghost-text AI completion in the editor (Tab to accept)"
+        >
+          ✨ AI complete
+        </Switch>
+        {aiComplete && (
+          <Select
+            value={completeModel}
+            onChange={(_e: unknown, { value }: { value: string | number | boolean }) => {
+              const m = String(value);
+              setCompleteModel(m);
+              try {
+                localStorage.setItem(COMPLETION_MODEL_STORAGE, m);
+              } catch {
+                /* ignore */
+              }
+            }}
+            style={{ minWidth: 200 }}
+          >
+            {COMPLETION_MODEL_CHOICES.map((m) => (
+              <Select.Option key={m.id} label={m.label} value={m.id} />
+            ))}
+          </Select>
+        )}
         {wizardState && onUpdateConfig && (
           <Button
             appearance="primary"
@@ -1146,6 +1243,9 @@ export function FileBrowser({
                   // IDE feel: accept suggestions with Tab, suggest while typing
                   // (not only on trigger characters), keep snippets visible.
                   tabCompletion: 'on',
+                  // Ghost-text AI completion (accept with Tab). The provider self-gates on
+                  // the opt-in flag, so leaving this enabled is free when AI complete is off.
+                  inlineSuggest: { enabled: true },
                   quickSuggestions: { other: true, comments: false, strings: true },
                   suggestOnTriggerCharacters: true,
                   acceptSuggestionOnEnter: 'on',

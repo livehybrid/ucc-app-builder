@@ -12,9 +12,19 @@
 # Usage:  bash deploy/build_agent_app.sh [output_dir]
 set -euo pipefail
 HERE="$(cd "$(dirname "$0")/.." && pwd)"          # splunk-app/
+REPO="$(cd "$HERE/.." && pwd)"                     # repo root
 OUT="${1:-/tmp/ucc_app_builder_build}"
 PYVER="3.13"
 PLAT="manylinux2014_x86_64"
+
+# Build the SPA bundle FRESH into appserver/static/ui so the package never ships a stale
+# UI. The bundle is a build artifact (NOT committed) — ucc-gen below copies appserver/
+# static verbatim, so it must exist first. Install JS deps if a clean checkout lacks them.
+echo "==> build SPA UI (vite) -> appserver/static/ui"
+if [ ! -d "$REPO/node_modules" ]; then
+  ( cd "$REPO" && npm ci )
+fi
+bash "$HERE/deploy/build_ui.sh"
 
 echo "==> ucc-gen build"
 ucc-gen build --source "$HERE/ucc-app" -o "$OUT"
@@ -52,9 +62,10 @@ if grep -q '^\[triggers\]' "$APPDIR/default/app.conf"; then
 else
   printf '\n[triggers]\nreload.ucc_app_builder_settings = simple\nreload.tools = simple\n' >> "$APPDIR/default/app.conf"
 fi
-#  - check_for_compiled_python: strip __pycache__ / *.pyc shipped inside wheels.
-find "$APPDIR/lib" -type d -name '__pycache__' -prune -exec rm -rf {} + 2>/dev/null || true
-find "$APPDIR/lib" -type f -name '*.pyc' -delete 2>/dev/null || true
+#  - check_for_compiled_python: strip __pycache__ / *.pyc from the WHOLE package (wheels in
+#    lib/, AND any bin/ bytecode left by local py_compile checks — AppInspect fails on either).
+find "$APPDIR" -type d -name '__pycache__' -prune -exec rm -rf {} + 2>/dev/null || true
+find "$APPDIR" -type f -name '*.pyc' -delete 2>/dev/null || true
 #  - check_for_bin_files: NO bundled library file should carry execute bits (dlopen
 #    needs read, not execute; wheels also ship +x helper scripts like tqdm/completion.sh).
 #    Strip execute from every file under lib/ (directories keep +x for traversal).

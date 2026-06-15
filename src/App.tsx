@@ -19,12 +19,21 @@ import { AIChatPanel } from './components/AIChatPanel';
 import { ConfigPreview } from './components/ConfigPreview';
 import { LoopPanel } from './components/LoopPanel';
 import { GitHubPanel } from './components/GitHubPanel';
+import { InputEmulator } from './components/InputEmulator';
 import type { GitHubSession } from './types/github';
 import Modal from '@splunk/react-ui/Modal';
 import { VirtualFileSystem } from './lib/vfs';
 import { generateSplunkApp } from './lib/generator';
 import { downloadAppAsZip } from './lib/packager';
 import { loadImportToVFS } from './lib/importer';
+import {
+  appLibraryAvailable,
+  listApps,
+  saveApp,
+  loadApp,
+  deleteApp,
+  type SavedApp,
+} from './lib/appLibrary';
 import {
   saveState,
   loadState,
@@ -363,6 +372,101 @@ function App() {
   const [gitHubSession, setGitHubSession] = useState<GitHubSession | undefined>(undefined);
   const [showGitHubModal, setShowGitHubModal] = useState(false);
   const [gitHubImportMode, setGitHubImportMode] = useState(false); // true = import from repo, false = push to repo
+  // My Apps (server-side KV library of saved add-on projects). Native Splunk app only.
+  const myAppsEnabled = appLibraryAvailable();
+  const [showMyApps, setShowMyApps] = useState(false);
+  const [showEmulator, setShowEmulator] = useState(false);
+  const [savedApps, setSavedApps] = useState<SavedApp[]>([]);
+  const [myAppsBusy, setMyAppsBusy] = useState(false);
+  const [myAppsMsg, setMyAppsMsg] = useState<string | null>(null);
+
+  const appIdFromVfs = useCallback((): string => {
+    try {
+      const gc = vfs.getAllFiles().find((f) => f.path.endsWith('globalConfig.json'));
+      if (gc) return JSON.parse(gc.content)?.meta?.name || appName;
+    } catch {
+      /* fall back */
+    }
+    return appName;
+  }, [vfs, appName]);
+
+  const refreshApps = useCallback(async () => {
+    setMyAppsBusy(true);
+    setMyAppsMsg(null);
+    try {
+      setSavedApps(await listApps());
+    } catch (e) {
+      setMyAppsMsg((e as Error).message);
+    } finally {
+      setMyAppsBusy(false);
+    }
+  }, []);
+
+  const openMyApps = useCallback(() => {
+    setShowMyApps(true);
+    void refreshApps();
+  }, [refreshApps]);
+
+  const handleSaveCurrentApp = useCallback(async () => {
+    const appId = appIdFromVfs();
+    const files = vfs.getAllFiles().map((f) => ({ path: f.path, content: f.content }));
+    if (!files.length) {
+      setMyAppsMsg('Nothing to save — build or import an add-on first.');
+      return;
+    }
+    setMyAppsBusy(true);
+    setMyAppsMsg(null);
+    try {
+      await saveApp(appId, appName, '1.0.0', files);
+      setMyAppsMsg(`Saved "${appId}" (${files.length} files).`);
+      await refreshApps();
+    } catch (e) {
+      setMyAppsMsg((e as Error).message);
+    } finally {
+      setMyAppsBusy(false);
+    }
+  }, [appIdFromVfs, vfs, appName, refreshApps]);
+
+  const handleResumeApp = useCallback(
+    async (appId: string) => {
+      setMyAppsBusy(true);
+      setMyAppsMsg(null);
+      try {
+        const proj = await loadApp(appId);
+        if (!proj) {
+          setMyAppsMsg('App not found.');
+          return;
+        }
+        vfs.fromSnapshot({
+          files: proj.files.map((f) => ({ path: f.path, content: f.content, source: 'user' as const })),
+        });
+        setGenerated(true);
+        setAppName(proj.name || appId);
+        setShowMyApps(false);
+        setMode('files');
+      } catch (e) {
+        setMyAppsMsg((e as Error).message);
+      } finally {
+        setMyAppsBusy(false);
+      }
+    },
+    [vfs]
+  );
+
+  const handleDeleteApp = useCallback(
+    async (appId: string) => {
+      setMyAppsBusy(true);
+      try {
+        await deleteApp(appId);
+        await refreshApps();
+      } catch (e) {
+        setMyAppsMsg((e as Error).message);
+      } finally {
+        setMyAppsBusy(false);
+      }
+    },
+    [refreshApps]
+  );
   const [chatOpen, setChatOpen] = useState(false);
   const [showPreview, setShowPreview] = useState(false);
   // Version counter to force re-renders when VFS changes (e.g., AI writes files)
@@ -543,11 +647,26 @@ function App() {
             title="Render globalConfig.json as the built app's UI — tabs, input forms and live validators — without running a build."
           />
           <Button
+            appearance={showEmulator ? 'primary' : 'default'}
+            onClick={() => setShowEmulator(true)}
+            disabled={!generated}
+            label="Test Input"
+            title="Run an input's collection code with values you provide (real HTTP, no install) and see the events it would index."
+          />
+          <Button
             appearance={gitHubSession ? 'primary' : 'default'}
             onClick={() => setShowGitHubModal(true)}
             label="GitHub"
             icon={<Rocket />}
           />
+          {myAppsEnabled && (
+            <Button
+              appearance={showMyApps ? 'primary' : 'default'}
+              onClick={openMyApps}
+              label="My Apps"
+              title="Save, list and resume your add-on projects (stored in Splunk KV)."
+            />
+          )}
           <Button
             appearance={developerMode ? 'primary' : 'default'}
             onClick={() => setDeveloperMode(!developerMode)}
@@ -790,6 +909,81 @@ function App() {
             );
           })()}
       </Main>
+
+      {/* Input Emulator Modal */}
+      <InputEmulator open={showEmulator} onClose={() => setShowEmulator(false)} vfs={vfs} />
+
+      {/* My Apps Modal */}
+      <Modal
+        open={showMyApps}
+        onRequestClose={() => setShowMyApps(false)}
+        style={{ width: '640px', maxWidth: '92%' }}
+        returnFocus={modalReturnRef}
+      >
+        <Modal.Header title="My Apps" />
+        <Modal.Body>
+          {myAppsMsg && (
+            <Message type="info" style={{ marginBottom: 12 }}>
+              {myAppsMsg}
+            </Message>
+          )}
+          <div style={{ display: 'flex', gap: 8, marginBottom: 12 }}>
+            <Button
+              appearance="primary"
+              onClick={handleSaveCurrentApp}
+              disabled={myAppsBusy || !generated}
+              label="💾 Save current app"
+            />
+            <Button appearance="default" onClick={refreshApps} disabled={myAppsBusy} label="Refresh" />
+          </div>
+          {savedApps.length === 0 ? (
+            <p style={{ color: '#9b9ea3' }}>
+              {myAppsBusy ? 'Loading…' : 'No saved apps yet — build one and click “Save current app”.'}
+            </p>
+          ) : (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+              {savedApps.map((a) => (
+                <div
+                  key={a.appId}
+                  style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'space-between',
+                    border: '1px solid rgba(255,255,255,0.12)',
+                    borderRadius: 6,
+                    padding: '8px 12px',
+                  }}
+                >
+                  <div>
+                    <div style={{ fontWeight: 600 }}>{a.name || a.appId}</div>
+                    <div style={{ fontSize: '0.8em', color: '#9b9ea3' }}>
+                      <code>{a.appId}</code> · {a.fileCount} files
+                      {a.updated_at ? ` · ${new Date(a.updated_at * 1000).toLocaleString()}` : ''}
+                    </div>
+                  </div>
+                  <div style={{ display: 'flex', gap: 6 }}>
+                    <Button
+                      appearance="primary"
+                      onClick={() => handleResumeApp(a.appId)}
+                      disabled={myAppsBusy}
+                      label="Resume"
+                    />
+                    <Button
+                      appearance="destructive"
+                      onClick={() => handleDeleteApp(a.appId)}
+                      disabled={myAppsBusy}
+                      label="Delete"
+                    />
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </Modal.Body>
+        <Modal.Footer>
+          <Button appearance="default" onClick={() => setShowMyApps(false)} label="Close" />
+        </Modal.Footer>
+      </Modal>
 
       {/* GitHub Modal */}
       <Modal

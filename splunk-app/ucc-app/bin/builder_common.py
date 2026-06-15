@@ -192,3 +192,87 @@ def sidecar_call(path, payload, session_key):
             return json.loads(resp.read().decode('utf-8')), None
     except Exception as e:  # noqa: BLE001
         return None, str(e)
+
+
+APPS_COLLECTION = 'ucc_builder_apps'
+
+
+class KVAppLibrary:
+    """Saved add-on projects ('My Apps') — one KV row per (user, appId), each holding the
+    project's authored source files as a JSON blob. Lets a user save, list, resume and
+    delete multiple add-ons across sessions/devices (server-side, unlike the SPA's
+    single-state localStorage)."""
+
+    def __init__(self, session_key, app, user=None):
+        self.sk = session_key
+        self.app = app
+        self.user = user
+        self.base = f'/servicesNS/nobody/{app}/storage/collections/data/{APPS_COLLECTION}'
+
+    def _uid(self):
+        if self.user:
+            safe = ''.join(c if (c.isalnum() or c in '_-') else '_' for c in str(self.user))
+            return ('u_' + safe)[:80]
+        return str(abs(hash(self.sk)) % (10 ** 12))
+
+    def _key(self, app_id):
+        safe_app = ''.join(c if (c.isalnum() or c in '_-.') else '_' for c in str(app_id))[:120]
+        return f'{self._uid()}:{safe_app}'
+
+    def _doc_url(self, app_id):
+        from urllib.parse import quote
+        return f'{self.base}/{quote(self._key(app_id), safe="")}'
+
+    def _get(self, app_id):
+        try:
+            _, body = rest.simpleRequest(self._doc_url(app_id), sessionKey=self.sk,
+                                         method='GET', raiseAllErrors=False)
+            doc = json.loads(body)
+            return doc if isinstance(doc, dict) and '_key' in doc else None
+        except Exception:
+            return None
+
+    def save(self, app_id, name, version, files):
+        doc = {'_key': self._key(app_id), 'uid': self._uid(), 'appId': app_id,
+               'name': name or app_id, 'version': version or '1.0.0',
+               'files': json.dumps(files or []), 'updated_at': time.time()}
+        if self._get(app_id) is not None:
+            rest.simpleRequest(self._doc_url(app_id), sessionKey=self.sk, method='POST',
+                               jsonargs=json.dumps(doc), raiseAllErrors=False)
+        else:
+            rest.simpleRequest(self.base, sessionKey=self.sk, method='POST',
+                               jsonargs=json.dumps(doc), raiseAllErrors=False)
+        return {'appId': app_id, 'fileCount': len(files or [])}
+
+    def list(self):
+        try:
+            q = json.dumps({'uid': self._uid()})
+            _, body = rest.simpleRequest(f'{self.base}?query={q}&count=0', sessionKey=self.sk,
+                                         method='GET', raiseAllErrors=False)
+            rows = json.loads(body)
+            out = [{'appId': r.get('appId'), 'name': r.get('name'),
+                    'version': r.get('version'), 'updated_at': r.get('updated_at'),
+                    'fileCount': len(json.loads(r.get('files') or '[]'))}
+                   for r in (rows if isinstance(rows, list) else [])]
+            return sorted(out, key=lambda x: x.get('updated_at') or 0, reverse=True)
+        except Exception:
+            return []
+
+    def load(self, app_id):
+        doc = self._get(app_id)
+        if not doc:
+            return None
+        try:
+            files = json.loads(doc.get('files') or '[]')
+        except ValueError:
+            files = []
+        return {'appId': doc.get('appId'), 'name': doc.get('name'),
+                'version': doc.get('version'), 'files': files}
+
+    def delete(self, app_id):
+        try:
+            rest.simpleRequest(self._doc_url(app_id), sessionKey=self.sk,
+                               method='DELETE', raiseAllErrors=False)
+            return True
+        except Exception:
+            return False

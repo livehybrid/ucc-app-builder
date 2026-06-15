@@ -53,6 +53,33 @@ TOOLS = [
     ("ucc_package", "POST", "/services/ucc_app_builder/package",
      "Build + AppInspect-validate with auto-fix and return the path to an installable, AppInspect-clean .tar.gz.",
      {}, [], {}),
+    ("ucc_generate_dashboard", "POST", "/services/ucc_app_builder/generate_dashboard",
+     "Generate a Dashboard Studio (v2) dashboard. Provide title + panels[] where each panel is "
+     "{title, spl, viz}; viz is one of line, area, column, bar, table, single, pie, scatter, map. "
+     "Ground SPL in real indexes/sourcetypes. Use timechart+line for trends, stats/top+bar/column/"
+     "table for breakdowns, single for KPIs. Written to default/data/ui/views/<name>.xml.",
+     {"title": {"type": "string", "description": "Dashboard title."},
+      "description": {"type": "string"},
+      "panels": {"type": "array", "description": "Panels: [{title, spl, viz}].",
+                 "items": {"type": "object",
+                           "properties": {"title": {"type": "string"}, "spl": {"type": "string"},
+                                          "viz": {"type": "string"}}}},
+      "theme": {"type": "string", "description": "light or dark (default dark)."}},
+     ["title", "panels"],
+     {"title": "$title$", "description": "$description$", "panels": "$panels$", "theme": "$theme$"}),
+    ("ucc_generate_savedsearch", "POST", "/services/ucc_app_builder/generate_savedsearch",
+     "Generate a savedsearches.conf entry — a report or scheduled alert. Provide name + search (SPL). "
+     "Optional: description, earliest, latest, cronSchedule (schedules it), and alert={condition "
+     "(greater than|less than|equal to), threshold, severity 1-6} for alerting. Ground SPL in real "
+     "indexes/sourcetypes. Appends to default/savedsearches.conf.",
+     {"name": {"type": "string"}, "search": {"type": "string", "description": "SPL."},
+      "description": {"type": "string"}, "cronSchedule": {"type": "string"},
+      "earliest": {"type": "string"}, "latest": {"type": "string"},
+      "alert": {"type": "object", "description": "{condition, threshold, severity}"}},
+     ["name", "search"],
+     {"name": "$name$", "search": "$search$", "description": "$description$",
+      "cronSchedule": "$cronSchedule$", "earliest": "$earliest$", "latest": "$latest$",
+      "alert": "$alert$"}),
 ]
 
 

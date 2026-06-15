@@ -112,7 +112,15 @@ jobs:
       - name: Install UCC + AppInspect
         run: pip install "splunk-add-on-ucc-framework>=6.5.0" "splunk-appinspect>=4.2.1"
 
-      - name: Build the native Splunk app (ucc-gen + Agent SDK deps)
+      # build_agent_app.sh now builds the SPA bundle (it is no longer committed), so the
+      # packaging jobs need Node too.
+      - name: Setup Node.js
+        uses: actions/setup-node@v5
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      - name: Build the native Splunk app (SPA + ucc-gen + Agent SDK deps)
         run: bash splunk-app/deploy/build_agent_app.sh "$RUNNER_TEMP/uccbuild"
 
       - name: Package tarball
@@ -198,6 +206,13 @@ jobs:
 
       - name: Install UCC framework
         run: pip install "splunk-add-on-ucc-framework>=6.5.0"
+
+      # build_agent_app.sh now builds the SPA bundle (no longer committed) → needs Node.
+      - name: Setup Node.js
+        uses: actions/setup-node@v5
+        with:
+          node-version: '20'
+          cache: 'npm'
 
       - name: Build the native Splunk app
         run: bash splunk-app/deploy/build_agent_app.sh "$RUNNER_TEMP/uccbuild"

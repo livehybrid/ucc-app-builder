@@ -57,6 +57,8 @@ export interface LoopOptions {
   includeWarnings?: boolean;
   /** Allow the LLM fixer when deterministic rules can't resolve a check. Default true if key present. */
   useLlm?: boolean;
+  /** Override the LLM fixer model (Configuration → AI Provider → build_model). */
+  fixerModel?: string;
   /** Skip deterministic rule fixers and route everything to the LLM (demo / eval). Default false. */
   llmOnly?: boolean;
   onEvent?: (e: LoopEvent) => void;
@@ -392,7 +394,8 @@ function deterministicBuildFix(
 async function llmFix(
   checks: AppInspectCheck[],
   files: Map<string, string>,
-  appId: string
+  appId: string,
+  modelOverride?: string
 ): Promise<{ changed: string[]; note: string }> {
   const apiKey = openRouterApiKey();
   if (!apiKey) return { changed: [], note: 'No OPENROUTER_API_KEY — skipped LLM fix.' };
@@ -458,7 +461,7 @@ async function llmFix(
       'X-Title': 'UCCBuilder-AppInspectLoop',
     },
     body: JSON.stringify({
-      model: fixerModel(),
+      model: modelOverride || fixerModel(),
       messages: [
         { role: 'system', content: system },
         { role: 'user', content: user },
@@ -649,7 +652,7 @@ export async function runAgentLoop(opts: LoopOptions): Promise<LoopResult> {
             description: 'ucc-gen build failed. Fix the source so the add-on builds.',
             messages: [{ message: `${msg}\n\n${buildLogs.slice(-15).join('\n')}` }],
           };
-          const res = await llmFix([synthetic], files, appId);
+          const res = await llmFix([synthetic], files, appId, opts.fixerModel);
           // A no-op LLM fix (changed: []) on an unchanged build error means the
           // model "claimed" a fix but wrote nothing — exactly the loop the live
           // trace hit. Break rather than re-prompt the same failure to the cap.
@@ -753,7 +756,7 @@ export async function runAgentLoop(opts: LoopOptions): Promise<LoopResult> {
 
     if (unresolved.length && useLlm) {
       try {
-        const res = await llmFix(unresolved, files, appId);
+        const res = await llmFix(unresolved, files, appId, opts.fixerModel);
         res.changed.forEach((k) => changedThisRound.add(k));
         emit('fix', iteration, `[llm] ${res.note}`, {
           changed: res.changed,

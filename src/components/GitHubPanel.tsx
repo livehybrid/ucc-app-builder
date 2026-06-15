@@ -8,6 +8,8 @@ import Modal from '@splunk/react-ui/Modal';
 import ControlGroup from '@splunk/react-ui/ControlGroup';
 import Heading from '@splunk/react-ui/Heading';
 import WaitSpinner from '@splunk/react-ui/WaitSpinner';
+import Switch from '@splunk/react-ui/Switch';
+import { buildValidateWorkflowYaml, CI_WORKFLOW_PATH } from '../lib/ciWorkflow';
 import { GitHubSession, GitHubRepo, DeviceFlowResponse } from '../types/github';
 import {
   initiateDeviceFlow,
@@ -55,6 +57,7 @@ export function GitHubPanel({
   // Commit state
   // Commit state
   const [commitMessage, setCommitMessage] = useState('Initial Commit');
+  const [includeCicd, setIncludeCicd] = useState(true);
   const [pushing, setPushing] = useState(false);
   const [pushSuccess, setPushSuccess] = useState(false);
 
@@ -190,12 +193,26 @@ export function GitHubPanel({
     setError(null);
     setInfo('Pushing files...');
     try {
+      // Optionally generate a ready-to-run CI/CD workflow (ucc-gen build + AppInspect)
+      // alongside the add-on, at the repo root.
+      const extraFiles: Array<{ path: string; content: string }> = [];
+      if (includeCicd) {
+        let appId = session.selectedRepo.name;
+        try {
+          const gc = vfs.getAllFiles().find((f) => f.path.endsWith('globalConfig.json'));
+          if (gc) appId = JSON.parse(gc.content)?.meta?.name || appId;
+        } catch {
+          /* fall back to repo name */
+        }
+        extraFiles.push({ path: CI_WORKFLOW_PATH, content: buildValidateWorkflowYaml(appId) });
+      }
       await pushFiles(
         session.auth.accessToken,
         session.selectedRepo,
         vfs,
         commitMessage,
-        [] // Ignore files list
+        [], // Ignore files list
+        extraFiles
       );
 
       setInfo('Successfully pushed to GitHub!');
@@ -489,6 +506,18 @@ export function GitHubPanel({
                 onChange={(_e: unknown, { value }: { value: string }) => setCommitMessage(value)}
                 style={{ marginBottom: '10px', width: '100%', minHeight: '80px' }}
               />
+              <div style={{ marginBottom: '10px' }}>
+                <Switch
+                  selected={includeCicd}
+                  onClick={() => setIncludeCicd(!includeCicd)}
+                  appearance="checkbox"
+                >
+                  Include CI/CD workflow (ucc-gen build + AppInspect)
+                </Switch>
+                <p style={{ fontSize: '0.8em', color: '#9b9ea3', margin: '2px 0 0 0' }}>
+                  Adds <code>{CI_WORKFLOW_PATH}</code> so every push builds and AppInspect-validates the add-on.
+                </p>
+              </div>
               <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '10px' }}>
                 <Button
                   appearance="secondary"

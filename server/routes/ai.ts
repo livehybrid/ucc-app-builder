@@ -150,10 +150,24 @@ router.get('/ai/models', async (_req: Request, res: Response) => {
 router.get('/ai/config', (req: Request, res: Response) => {
   const serverManaged = !!openRouterApiKey(req);
   const profile = resolveModelProfile();
+  // Per-function models the Splunk proxy injected from the Configuration → AI Provider
+  // tab (X-Chat/Build/Completion-Model). Lets the SPA pick the configured chat/inline
+  // models without its own Splunk-config read. Empty in standalone.
+  const hdr = (n: string) => {
+    const v = req.headers[n];
+    const s = Array.isArray(v) ? v[0] : v;
+    return s ? String(s) : undefined;
+  };
+  const configuredModels = {
+    chat: hdr('x-chat-model'),
+    build: hdr('x-build-model'),
+    completion: hdr('x-completion-model'),
+  };
   res.json({
     serverManaged,
     profile: profile.name,
     models: profile.models,
+    configuredModels,
     // Back-compat: the current AIChatPanel still reads `defaultModel`.
     defaultModel: profile.models.executor,
     notes: profile.notes,

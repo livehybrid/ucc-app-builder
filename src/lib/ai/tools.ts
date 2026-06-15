@@ -34,6 +34,8 @@ import { buildApp } from './tools/buildApp';
 import { consultDocumentation } from './tools/consultDocumentation';
 import { getStanzaSpec, listStanzas } from './tools/getStanzaSpec';
 import { runUccGen, runAppInspect, installToSplunkDocker, browserCheck } from './tools/verifyTools';
+import { generateDashboard } from './tools/generateDashboard';
+import { generateSavedSearch } from './tools/generateSavedSearch';
 
 // 1. Canonical primitives — the single shared definition (also used server-side).
 for (const tool of CORE_AGENT_TOOLS) {
@@ -52,6 +54,9 @@ toolRegistry.register(runUccGen);
 toolRegistry.register(runAppInspect);
 toolRegistry.register(installToSplunkDocker);
 toolRegistry.register(browserCheck);
+// Dashboard / saved-search generation (also exposed as Splunk MCP tools).
+toolRegistry.register(generateDashboard);
+toolRegistry.register(generateSavedSearch);
 
 // Export the registry singleton as the default list (for backward compatibility where needed)
 // But mostly consumers should use toolRegistry.getAll()

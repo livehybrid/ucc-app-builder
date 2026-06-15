@@ -451,7 +451,10 @@ export async function pushFiles(
   repo: GitHubRepo,
   vfs: VirtualFileSystem,
   message: string,
-  filesToIgnore: string[] = []
+  filesToIgnore: string[] = [],
+  /** Extra repo-relative files (path already relative to the repo root, NOT app-id
+   *  prefixed) — e.g. a generated .github/workflows/build-validate.yml. */
+  extraFiles: Array<{ path: string; content: string }> = []
 ): Promise<void> {
   const owner = repo.full_name.split('/')[0];
   const repoName = repo.name;
@@ -506,6 +509,12 @@ export async function pushFiles(
       type: 'blob',
       content: file.content, // Use inline content instead of separate blob creation
     });
+  }
+
+  // Repo-relative extras (e.g. CI/CD workflow) — pushed at their given path verbatim.
+  for (const extra of extraFiles) {
+    if (!extra?.path) continue;
+    treeItems.push({ path: extra.path, mode: '100644', type: 'blob', content: extra.content });
   }
 
   if (treeItems.length === 0) return;

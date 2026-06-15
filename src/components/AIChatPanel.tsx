@@ -3,6 +3,9 @@ import Editor, { DiffEditor } from '@monaco-editor/react';
 import { toolRegistry } from '../lib/ai/tools';
 import { parseStream } from '../lib/ai/streamParser';
 import { fetchWithRetry } from '../lib/ai/retry';
+import { type UccSpec, renderBuildInstruction } from '../lib/ai/expansion';
+import { expandRequest, fetchGrounding } from '../lib/ai/expandClient';
+import { SpecReviewGate } from './SpecReviewGate';
 import type { VirtualFileSystem } from '../lib/vfs';
 import styled from 'styled-components';
 import SidePanel from '@splunk/react-ui/SidePanel';
@@ -39,6 +42,9 @@ interface AIChatPanelProps {
 interface ChatMessage {
   role: 'user' | 'assistant' | 'system' | 'tool';
   content: string;
+  /** When set, the transcript shows this instead of `content` (e.g. a short summary for a
+      long approved-spec build instruction). The agent still receives `content`. */
+  displayContent?: string;
   timestamp: Date;
   tool_calls?: { id: string; type: string; function: { name: string; arguments: string } }[];
   tool_call_id?: string;
@@ -549,6 +555,25 @@ const MAX_ITER_STORAGE = 'splunk-app-builder-ai-max-iterations';
 const MAX_ITER_MIN = 1;
 const MAX_ITER_MAX = 20;
 
+const USE_SPLUNK_AGENT_STORAGE = 'splunk-app-builder-use-splunk-agent';
+
+/** True when the native Splunk app exposes the Splunk Agent SDK (splunklib.ai) chat
+ *  backend (agent_start / agent_poll), set by ui_loader.js. */
+function splunkAgentAvailable(): boolean {
+  return (window as unknown as { __UCC_SPLUNK_AGENT__?: boolean }).__UCC_SPLUNK_AGENT__ === true;
+}
+
+/** Same-origin fetch to a Splunk REST endpoint under this app (CSRF handled by the
+ *  loader). Returns undefined when not running embedded in Splunk. */
+function splunkFetch(path: string, init?: RequestInit): Promise<Response> | undefined {
+  const fn = (window as unknown as {
+    __UCC_SPLUNK_FETCH__?: (p: string, i?: RequestInit) => Promise<Response>;
+  }).__UCC_SPLUNK_FETCH__;
+  return fn ? fn(path, init) : undefined;
+}
+
+const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
+
 /** The user's decision on a pending approval card. */
 type ApprovalDecision = 'approve' | 'approve_session' | 'deny';
 
@@ -591,6 +616,29 @@ export function AIChatPanel({
     setMaxIterations(clamped);
     localStorage.setItem(MAX_ITER_STORAGE, String(clamped));
   };
+
+  // Use the Splunk Agent SDK (splunklib.ai) as the chat backend when the native app
+  // exposes it. Defaults ON where available (this is the Splunk-native brain); the
+  // OpenRouter client loop stays as the fallback and for standalone use. User-toggleable.
+  const splunkAgent = splunkAgentAvailable();
+  const [useSplunkAgent, setUseSplunkAgent] = useState<boolean>(() => {
+    if (!splunkAgent) return false;
+    return localStorage.getItem(USE_SPLUNK_AGENT_STORAGE) !== '0';
+  });
+  const saveUseSplunkAgent = (value: boolean) => {
+    setUseSplunkAgent(value);
+    localStorage.setItem(USE_SPLUNK_AGENT_STORAGE, value ? '1' : '0');
+  };
+  // True when the chat is driven by the Splunk Agent SDK. In this mode the OpenRouter-only
+  // settings (API key, model picker, client-side tool-approval policy, capability flags)
+  // don't apply — provider/model/key/temperature come from the Configuration → AI Provider
+  // tab and tools run server-side — so the UI hides them.
+  const splunkMode = splunkAgent && useSplunkAgent;
+
+  // Expert Expansion + review gate. `pendingSpec` non-null shows the gate (the chat body is
+  // replaced by it); `expanding` is the in-flight expansion LLM call.
+  const [pendingSpec, setPendingSpec] = useState<UccSpec | null>(null);
+  const [expanding, setExpanding] = useState(false);
 
   // Live model catalog from OpenRouter (tool-calling models, server-cached).
   // Falls back to the static AVAILABLE_MODELS list when unavailable.
@@ -1060,6 +1108,113 @@ export function AIChatPanel({
     if (items.length) setDecisions(items);
   };
 
+  /** Render one progress event from the Splunk Agent SDK (splunklib.ai) job. The SDK
+   *  middleware emits: `assistant` (a model reply with text — one per turn, so each is a
+   *  fresh bubble), `tool_call` (name + args), `tool_result` (content), and a terminal
+   *  `done` (answer + the project files to sync to the VFS) / `error`. */
+  const handleSplunkEvent = (ev: Record<string, unknown>) => {
+    const type = String(ev.event || '');
+    if (type === 'assistant') {
+      const content = String(ev.content || '');
+      if (content.trim()) {
+        setMessages((prev) => [...prev, { role: 'assistant', content, timestamp: new Date() }]);
+      }
+      return;
+    }
+    if (type === 'tool_call') {
+      const id = String(ev.id || '');
+      const args = ev.args;
+      if (id && args && typeof args === 'object') {
+        toolCallArgsRef.current[id] = args as Record<string, unknown>;
+      }
+      const toolName = String(ev.name || '');
+      if (toolName === 'create_addon' || toolName === 'build_and_inspect') {
+        // Surface the headline build steps so the chat reads as a narrative.
+        setMessages((prev) => [
+          ...prev,
+          { role: 'system', content: `🔧 ${toolName}…`, timestamp: new Date() },
+        ]);
+      }
+      return;
+    }
+    if (type === 'tool_result') {
+      const id = String(ev.id || '');
+      const callArgs = toolCallArgsRef.current[id];
+      setMessages((prev) => [
+        ...prev,
+        {
+          role: 'tool',
+          content: String(ev.content || ''),
+          name: String(ev.name || ''),
+          tool_call_id: id,
+          toolPath: typeof callArgs?.path === 'string' ? (callArgs.path as string) : undefined,
+          timestamp: new Date(),
+        },
+      ]);
+      return;
+    }
+    if (type === 'done') {
+      if (Array.isArray(ev.files)) {
+        applyServerFiles(ev.files as Array<{ path: string; content: string }>);
+      }
+      return;
+    }
+    if (type === 'error') {
+      throw new Error(String(ev.error || 'Splunk agent error'));
+    }
+  };
+
+  /** Drive the Splunk Agent SDK (splunklib.ai) chat: start a server-side job, then poll
+   *  for events. Splunk persistent REST handlers can't stream and the embedded SPA sits
+   *  behind a buffering proxy, so polling is how progress arrives incrementally — each
+   *  poll is its own round-trip, filling the transcript step by step. */
+  const splunkAgentLoop = async (
+    messages: Array<{ role: string; content: string }>
+  ) => {
+    // In Splunk-AI mode the Configuration → AI Provider tab is the single source of
+    // truth for provider + model + key + temperature (the Splunk-native way). We do NOT
+    // send a model from the SPA picker (its list is OpenRouter IDs, which wouldn't be
+    // valid for a non-OpenRouter provider); only the runtime step budget is passed.
+    const startRes = await splunkFetch('/agent_start', {
+      method: 'POST',
+      body: JSON.stringify({ messages, max_steps: maxIterations }),
+      signal: runAbortRef.current?.signal,
+    });
+    if (!startRes) throw new Error('Splunk Agent SDK backend is not available.');
+    const startBody = await startRes.json().catch(() => ({}));
+    if (!startRes.ok || startBody.error) {
+      throw new Error(startBody.error || `agent_start failed (${startRes.status})`);
+    }
+    const jobId = String(startBody.job_id || '');
+    if (!jobId) throw new Error('agent_start returned no job id.');
+
+    let cursor = 0;
+    let running = true;
+    // First poll quickly (the model's first reply is usually fast), then settle into a
+    // steady cadence that keeps the UI live without hammering splunkd.
+    let delay = 600;
+    while (running) {
+      if (runAbortRef.current?.signal.aborted) {
+        throw Object.assign(new Error('Stopped by user.'), { name: 'AbortError' });
+      }
+      await sleep(delay);
+      delay = 1500;
+      const pollRes = await splunkFetch('/agent_poll', {
+        method: 'POST',
+        body: JSON.stringify({ job_id: jobId, cursor }),
+        signal: runAbortRef.current?.signal,
+      });
+      if (!pollRes) throw new Error('Splunk Agent SDK backend is not available.');
+      if (!pollRes.ok) throw new Error(`agent_poll failed (${pollRes.status})`);
+      const data = await pollRes.json();
+      if (typeof data.cursor === 'number') cursor = data.cursor;
+      running = !!data.running;
+      for (const ev of (data.events || []) as Array<Record<string, unknown>>) {
+        handleSplunkEvent(ev);
+      }
+    }
+  };
+
   const streamServerAgentLoop = async (payload: {
     sessionId: string;
     model: string;
@@ -1319,7 +1474,46 @@ export function AIChatPanel({
     if (pendingData.length > 0) flushEvent();
   };
 
-  const sendMessage = async (overrideText?: string) => {
+  /** "Review first": run Expert Expansion on the typed request and open the review gate. */
+  const startReview = async () => {
+    const text = inputValue.trim();
+    if (!text || isLoading || expanding) return;
+    const serverManaged = splunkMode || (aiConfig?.serverManaged ?? false);
+    if (!serverManaged && !apiKey) {
+      setError('Please set your OpenRouter API key in Settings first.');
+      setShowSettings(true);
+      return;
+    }
+    setExpanding(true);
+    setError(null);
+    try {
+      const grounding = await fetchGrounding();
+      const spec = await expandRequest({
+        request: text,
+        model: activeModel,
+        serverManaged,
+        apiKey,
+        grounding,
+      });
+      setPendingSpec(spec);
+    } catch (e) {
+      setError(`Couldn't expand the request: ${(e as Error).message}`);
+    } finally {
+      setExpanding(false);
+    }
+  };
+
+  /** Gate "Build": seed the chosen agent path with the approved spec (full instruction to
+   *  the agent, short summary in the transcript). */
+  const buildFromSpec = (spec: UccSpec) => {
+    setPendingSpec(null);
+    setInputValue('');
+    const n = spec.inputs.length;
+    const summary = `▶ Building approved spec: **${spec.name}** (\`${spec.appId}\`) — ${n} input${n === 1 ? '' : 's'}, auth \`${spec.account.authType}\`.`;
+    void sendMessage(renderBuildInstruction(spec), summary);
+  };
+
+  const sendMessage = async (overrideText?: string, displayText?: string) => {
     const text = (overrideText ?? inputValue).trim();
     if (!text || isLoading) return;
 
@@ -1337,7 +1531,13 @@ export function AIChatPanel({
     const isProxied = (window as unknown as { __UCC_PROXIED__?: boolean }).__UCC_PROXIED__ === true;
     const useServerStream = isServerManaged && !isProxied;
 
-    if (!isServerManaged && !apiKey) {
+    // Splunk Agent SDK (splunklib.ai) is the Splunk-native brain: the agent runs inside
+    // Splunk on the Configuration-page key and its builder tools, and we surface its
+    // progress by polling. Preferred when available + enabled (splunkMode); the OpenRouter
+    // loops below remain the fallback (and for standalone use).
+    const useSplunk = splunkMode;
+
+    if (!useSplunk && !isServerManaged && !apiKey) {
       setError('Please set your OpenRouter API key in Settings first.');
       setShowSettings(true);
       return;
@@ -1346,6 +1546,7 @@ export function AIChatPanel({
     const userMessage: ChatMessage = {
       role: 'user',
       content: text,
+      ...(displayText ? { displayContent: displayText } : {}),
       timestamp: new Date(),
     };
 
@@ -1390,6 +1591,17 @@ export function AIChatPanel({
     ];
 
     try {
+      if (useSplunk) {
+        // The splunklib.ai agent has its own system prompt + builder tools and reads the
+        // project from Splunk; it just needs the conversation (user/assistant turns).
+        await splunkAgentLoop(
+          contextMessages
+            .filter((m) => m.role === 'user' || m.role === 'assistant')
+            .map((m) => ({ role: m.role, content: m.content }))
+        );
+        return;
+      }
+
       if (useServerStream) {
         const systemContent = buildSystemMessage();
         const contextMessages = newMessages.length > 20 ? newMessages.slice(-20) : newMessages;
@@ -1758,7 +1970,14 @@ export function AIChatPanel({
             </div>
           </PanelHeader>
 
-          {showSettings ? (
+          {pendingSpec ? (
+            <SpecReviewGate
+              spec={pendingSpec}
+              onBuild={buildFromSpec}
+              onCancel={() => setPendingSpec(null)}
+              busy={isLoading}
+            />
+          ) : showSettings ? (
             <>
               <SettingsSection style={{ padding: '12px 20px' }}>
                 {isLoading && (
@@ -1767,6 +1986,22 @@ export function AIChatPanel({
                     progress or stop it. Model changes apply to the NEXT message, not the current
                     run.
                   </Message>
+                )}
+                {splunkAgent && (
+                  <div style={{ marginBottom: 16 }}>
+                    <Switch
+                      selected={useSplunkAgent}
+                      onClick={() => saveUseSplunkAgent(!useSplunkAgent)}
+                      appearance="toggle"
+                    >
+                      Use Splunk Agent SDK (splunklib.ai)
+                    </Switch>
+                    <Message type="info" style={{ marginTop: 8 }}>
+                      {useSplunkAgent
+                        ? 'The assistant runs inside Splunk on the Splunk Agent SDK. Provider, model, API key and temperature all come from the Configuration → AI Provider tab (the model picker below is ignored in this mode). Turn off to use the OpenRouter agent instead.'
+                        : 'Using the OpenRouter agent. Turn on to run the Splunk-native Agent SDK (splunklib.ai) instead.'}
+                    </Message>
+                  </div>
                 )}
                 {aiConfig?.serverManaged ? (
                   <Message type="success" style={{ marginBottom: 12 }}>
@@ -1794,6 +2029,8 @@ export function AIChatPanel({
                   </>
                 )}
 
+                {!splunkMode && (
+                <>
                 <ControlGroup
                   label="Model"
                   labelPosition="top"
@@ -1892,7 +2129,10 @@ export function AIChatPanel({
                       : 'disabled (standalone)'}
                   </Message>
                 )}
+                </>
+                )}
 
+                {!splunkMode && (
                 <div
                   style={{
                     marginTop: 16,
@@ -1913,6 +2153,7 @@ export function AIChatPanel({
                       : 'You will be prompted to approve file changes.'}
                   </p>
                 </div>
+                )}
 
                 <ControlGroup
                   label="Max agent iterations"
@@ -1938,6 +2179,7 @@ export function AIChatPanel({
                   .
                 </p>
 
+                {!splunkMode && (
                 <div
                   data-testid="tool-policy-settings"
                   style={{
@@ -1989,6 +2231,7 @@ export function AIChatPanel({
                     });
                   })()}
                 </div>
+                )}
               </SettingsSection>
               <PanelFooter>
                 <Button
@@ -2061,7 +2304,9 @@ export function AIChatPanel({
                       >
                         {msg.role === 'assistant' ? (
                           <MarkdownContent>
-                            <ReactMarkdown remarkPlugins={[remarkGfm]}>{msg.content}</ReactMarkdown>
+                            <ReactMarkdown remarkPlugins={[remarkGfm]}>
+                              {msg.displayContent ?? msg.content}
+                            </ReactMarkdown>
                           </MarkdownContent>
                         ) : msg.role === 'tool' ? (
                           <ToolMessage name={msg.name} content={msg.content} path={msg.toolPath} />
@@ -2094,17 +2339,26 @@ export function AIChatPanel({
                   disabled={isLoading}
                   style={{ width: '100%' }}
                 />
-                <div style={{ display: 'flex', gap: 8, marginTop: 8 }}>
+                <div style={{ display: 'flex', gap: 8, marginTop: 8, alignItems: 'center' }}>
                   {isLoading ? (
                     <Button appearance="destructive" onClick={stopRun} label="⏹ Stop" />
                   ) : (
                     <Button
                       appearance="primary"
                       onClick={() => sendMessage()}
-                      disabled={!inputValue.trim()}
-                      label="Send"
+                      disabled={!inputValue.trim() || expanding}
+                      label="Build now"
                     />
                   )}
+                  {!isLoading && (
+                    <Button
+                      appearance="default"
+                      onClick={startReview}
+                      disabled={!inputValue.trim() || expanding}
+                      label={expanding ? 'Expanding…' : '🔍 Review first'}
+                    />
+                  )}
+                  {expanding && <WaitSpinner size="small" />}
                   {!isLoading && offerContinue && (
                     <Button
                       appearance="primary"

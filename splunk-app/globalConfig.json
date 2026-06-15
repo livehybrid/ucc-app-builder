@@ -83,10 +83,11 @@
                         },
                         {
                             "type": "text",
-                            "label": "Default model",
+                            "label": "Chat / agent model",
                             "field": "model",
                             "required": false,
                             "defaultValue": "anthropic/claude-sonnet-4.6",
+                            "help": "Model for the AI assistant / build agent (reasoning + tool calls). Use a capable model, e.g. anthropic/claude-sonnet-4.6 (avoid Opus for cost/latency).",
                             "validators": [
                                 {
                                     "type": "string",
@@ -98,10 +99,10 @@
                         },
                         {
                             "type": "text",
-                            "label": "Temperature",
+                            "label": "Chat / agent temperature",
                             "field": "temperature",
                             "required": false,
-                            "help": "Sampling temperature 0-2 (default 0.3).",
+                            "help": "Sampling temperature 0-2 for the chat/agent model (default 0.3).",
                             "validators": [
                                 {
                                     "type": "string",
@@ -111,6 +112,70 @@
                                 }
                             ],
                             "defaultValue": "0.3"
+                        },
+                        {
+                            "type": "text",
+                            "label": "Build-loop (AppInspect fixer) model",
+                            "field": "build_model",
+                            "required": false,
+                            "defaultValue": "anthropic/claude-sonnet-4.6",
+                            "help": "Model used by the self-correcting build loop to fix AppInspect findings. Needs solid JSON/code ability.",
+                            "validators": [
+                                {
+                                    "type": "string",
+                                    "errorMsg": "Max 128 chars",
+                                    "minLength": 0,
+                                    "maxLength": 128
+                                }
+                            ]
+                        },
+                        {
+                            "type": "text",
+                            "label": "Build-loop temperature",
+                            "field": "build_temperature",
+                            "required": false,
+                            "help": "Sampling temperature for the build-loop fixer (default 0.1).",
+                            "validators": [
+                                {
+                                    "type": "string",
+                                    "errorMsg": "Max 8 chars",
+                                    "minLength": 0,
+                                    "maxLength": 8
+                                }
+                            ],
+                            "defaultValue": "0.1"
+                        },
+                        {
+                            "type": "text",
+                            "label": "Inline-completion model",
+                            "field": "completion_model",
+                            "required": false,
+                            "defaultValue": "anthropic/claude-haiku-4.5",
+                            "help": "Fast, cheap model for editor ghost-text completion (fires on every typing pause).",
+                            "validators": [
+                                {
+                                    "type": "string",
+                                    "errorMsg": "Max 128 chars",
+                                    "minLength": 0,
+                                    "maxLength": 128
+                                }
+                            ]
+                        },
+                        {
+                            "type": "text",
+                            "label": "Inline-completion temperature",
+                            "field": "completion_temperature",
+                            "required": false,
+                            "help": "Sampling temperature for inline completion (default 0.1).",
+                            "validators": [
+                                {
+                                    "type": "string",
+                                    "errorMsg": "Max 8 chars",
+                                    "minLength": 0,
+                                    "maxLength": 8
+                                }
+                            ],
+                            "defaultValue": "0.1"
                         },
                         {
                             "type": "text",

@@ -42,6 +42,24 @@ project, never the Splunk filesystem. Architecture: [`architecture_diagram.md`](
 deep dive + the five SDK-in-Splunk gotchas: [`docs/SPLUNK-APP-PLAN.md`](docs/SPLUNK-APP-PLAN.md);
 build/deploy: [`splunk-app/deploy/build_agent_app.sh`](splunk-app/deploy/build_agent_app.sh).
 
+### The in-app chat now runs on the Splunk Agent SDK
+
+The embedded IDE's **AI Assistant** is driven by `splunklib.ai` end-to-end (job + poll, since
+persistent REST handlers can't stream SSE), keeping our own chat UI because the Splunk AI
+Assistant can't call our MCP builder tools. On top of it:
+
+- **Expert Expansion + review gate** — *Review first* turns a one-line request into a complete,
+  editable UCC spec (inputs, auth + encrypted secrets, proxy/logging, sourcetypes, checkpoints,
+  CIM) before the agent builds, so it can't ship a thin add-on.
+- **Copilot-style inline AI completion** in the Monaco editor for `globalConfig.json` / `.conf` /
+  Python (ghost text, Tab to accept) — alongside the existing `.conf.spec` IntelliSense + live
+  validation.
+- **Per-function models** in the Configuration → AI Provider tab: separate model + temperature
+  for the **chat/agent**, the **AppInspect build-loop fixer**, and **inline completion**.
+- **CI/CD generation** — connecting an add-on to GitHub can emit a ready-to-run
+  `.github/workflows/build-validate.yml` (ucc-gen build + AppInspect), with an upgrade path to
+  the shared `livehybrid/deploy-splunk-app-action` pipeline.
+
 **One key, configured the Splunk way.** The native app ships a standard **UCC
 Configuration page** (`globalConfig.json` → **AI Provider** tab) where you pick the
 provider (OpenRouter/OpenAI/Anthropic/Google), paste the API key, and set the model and
@@ -431,7 +449,7 @@ npx tsx scripts/agent-cli.ts --json "…"              # machine-readable result
 ## Tests & checks
 
 ```bash
-npm run test:run    # vitest — 459 unit tests (incl. AppInspect policy + clean-package regressions)
+npm run test:run    # vitest — 479 unit tests (incl. AppInspect policy + clean-package regressions)
 npm run typecheck   # tsc --noEmit (frontend)
 npm run build:server# tsc -p server/tsconfig.json (backend incl. loop + MCP)
 npm run build       # production frontend bundle

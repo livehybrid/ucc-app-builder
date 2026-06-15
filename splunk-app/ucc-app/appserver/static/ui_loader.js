@@ -79,6 +79,26 @@ require(['jquery', 'splunkjs/mvc/simplexml/ready!'], function ($) {
     return origFetch(input, init);
   };
 
+  // 2b) Splunk-native REST helper for the AI chat's Splunk Agent SDK (splunklib.ai)
+  //     backend. Those endpoints (agent_start / agent_poll) live on splunkd directly,
+  //     NOT on the Node build engine, so they bypass the /api proxy and call splunkd's
+  //     same-origin __raw path with the same CSRF treatment. `path` is relative to this
+  //     app's services root, e.g. '/agent_start'.
+  window.__UCC_SPLUNK_FETCH__ = function (path, init) {
+    init = init || {};
+    var url = '/' + locale + '/splunkd/__raw/services/' + APP + path;
+    var h = new Headers((init && init.headers) || {});
+    var token = csrfToken();
+    if (token) { h.set('X-Splunk-Form-Key', token); }
+    h.set('X-Requested-With', 'XMLHttpRequest');
+    if (!h.has('Content-Type')) { h.set('Content-Type', 'application/json'); }
+    init.headers = h;
+    return origFetch(url, init);
+  };
+  // Signal the SPA that the Splunk Agent SDK chat backend is reachable, so it can make
+  // splunklib.ai the assistant (with the OpenRouter client loop as a fallback).
+  window.__UCC_SPLUNK_AGENT__ = true;
+
   // 3) Tell @monaco-editor/react to load Monaco from the vendored copy, not a CDN.
   window.__UCC_MONACO_VS__ = staticBase + '/vendor/monaco/vs';
 

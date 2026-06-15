@@ -10,6 +10,8 @@ import { splunkRouter } from './routes/splunk.js';
 import { lintRouter } from './routes/lint.js';
 import { uccSchemaRouter } from './routes/uccSchema.js';
 import { mcpRouter } from './routes/mcp.js';
+import { emulateRouter } from './routes/emulate.js';
+import { generateRouter } from './routes/generate.js';
 
 // Load .env from app root first, then workspace root (if present).
 dotenv.config({ path: path.resolve(process.cwd(), '.env') });
@@ -89,6 +91,8 @@ app.use('/api', splunkRouter);
 app.use('/api', lintRouter);
 app.use('/api', uccSchemaRouter);
 app.use('/api', mcpRouter);
+app.use('/api', emulateRouter);
+app.use('/api', generateRouter);
 
 // Error handler
 app.use((err: Error, _req: express.Request, res: express.Response, _next: express.NextFunction) => {

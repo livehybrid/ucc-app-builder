@@ -139,6 +139,75 @@ class BuilderHandler(PersistentServerConnectionApplication):
         files = store.list_paths()
         return json_response({'ok': True, 'appId': store.app_id(), 'files': files})
 
+    # --- My Apps: save / list / resume / delete add-on projects (KV-backed) ----
+    def _apps(self, store, session_key):
+        return builder_common.KVAppLibrary(session_key, APP, user=getattr(store, 'user', None))
+
+    def _t_list_apps(self, store, args, session_key):
+        return json_response({'ok': True, 'apps': self._apps(store, session_key).list()})
+
+    def _t_save_app(self, store, args, session_key):
+        app_id = str(args.get('appId') or '').strip()
+        files = args.get('files')
+        if not app_id or not isinstance(files, list):
+            return json_response({'error': 'appId and files[] are required'}, status=400)
+        clean = [{'path': str(f.get('path')), 'content': str(f.get('content') or '')}
+                 for f in files if isinstance(f, dict) and f.get('path')]
+        result = self._apps(store, session_key).save(
+            app_id, str(args.get('name') or app_id), str(args.get('version') or '1.0.0'), clean)
+        return json_response({'ok': True, **result})
+
+    def _t_load_app(self, store, args, session_key):
+        app_id = str(args.get('appId') or '').strip()
+        if not app_id:
+            return json_response({'error': 'appId is required'}, status=400)
+        proj = self._apps(store, session_key).load(app_id)
+        if proj is None:
+            return json_response({'ok': True, 'found': False}, status=404)
+        return json_response({'ok': True, 'found': True, **proj})
+
+    def _t_delete_app(self, store, args, session_key):
+        app_id = str(args.get('appId') or '').strip()
+        if not app_id:
+            return json_response({'error': 'appId is required'}, status=400)
+        self._apps(store, session_key).delete(app_id)
+        return json_response({'ok': True, 'deleted': app_id})
+
+    # --- Dashboard / saved-search generation (MCP tools, engine-backed) --------
+    def _t_generate_dashboard(self, store, args, session_key):
+        app_id = store.app_id()
+        if not app_id:
+            return json_response({'error': 'call ucc_create_addon first'}, status=400)
+        result, err = sidecar_call('/api/generate/dashboard', {
+            'title': args.get('title'), 'description': args.get('description'),
+            'panels': args.get('panels'), 'theme': args.get('theme'),
+        }, session_key)
+        if err or not result or not result.get('ok'):
+            return json_response({'error': err or (result or {}).get('error') or 'generation failed'},
+                                 status=400)
+        safe = to_safe_project_path(app_id, result.get('path') or '')
+        if safe:
+            store.write(safe, result.get('content') or '')
+        return json_response({'ok': True, 'path': safe, 'fileName': result.get('fileName'),
+                              'text': f"Created Dashboard Studio dashboard {result.get('fileName')}."})
+
+    def _t_generate_savedsearch(self, store, args, session_key):
+        app_id = store.app_id()
+        if not app_id:
+            return json_response({'error': 'call ucc_create_addon first'}, status=400)
+        result, err = sidecar_call('/api/generate/savedsearch', dict(args), session_key)
+        if err or not result or not result.get('ok'):
+            return json_response({'error': err or (result or {}).get('error') or 'generation failed'},
+                                 status=400)
+        safe = to_safe_project_path(app_id, 'package/default/savedsearches.conf')
+        stanza = result.get('stanza') or ''
+        existing = (store.read(safe) or '') if safe else ''
+        content = (existing.rstrip() + '\n\n' + stanza) if existing.strip() else stanza
+        if safe:
+            store.write(safe, content)
+        return json_response({'ok': True, 'path': safe,
+                              'text': f"Added saved search [{args.get('name')}] to savedsearches.conf."})
+
     # --- AI provider settings (TrackMe-style) ------------------------------
     def _t_ai_config(self, store, args, session_key):
         """get current AI settings, or save them (action=save). API keys go to

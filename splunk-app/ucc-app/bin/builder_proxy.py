@@ -36,17 +36,22 @@ SETTINGS_CONF = APP + "_settings"
 _UCC_REALM = f"__REST_CREDENTIAL__#{APP}#configs/conf-{SETTINGS_CONF}"
 
 
-def _ucc_key(session_key):
-    """LLM API key from the UCC Configuration page (decrypted via solnlib), so the
-    embedded SPA's AI uses the SAME key as the in-Splunk advisor. Injected to the
-    engine as X-OpenRouter-Key. None on failure → engine falls back to its env key."""
+def _ucc_ai(session_key):
+    """The UCC Configuration page [ai_provider] stanza (api_key decrypted) via solnlib.
+    Returns {} on failure so the engine falls back to its env key/models."""
     try:
         from solnlib import conf_manager
         cfm = conf_manager.ConfManager(session_key, APP, realm=_UCC_REALM)
         conf = cfm.get_conf(SETTINGS_CONF)
-        return (dict(conf.get("ai_provider") or {})).get("api_key") or None
+        return dict(conf.get("ai_provider") or {})
     except Exception:
-        return None
+        return {}
+
+
+def _ucc_key(session_key):
+    """LLM API key from the UCC Configuration page — injected to the engine as
+    X-OpenRouter-Key so the embedded SPA's AI uses the SAME key as the in-Splunk advisor."""
+    return _ucc_ai(session_key).get("api_key") or None
 
 
 def _engine_base(session_key):
@@ -114,12 +119,18 @@ class ProxyHandler(PersistentServerConnectionApplication):
                 if k and k.lower() in ("content-type", "accept"):
                     headers[k] = v
 
-            # Unify AI key: hand the engine the Configuration-page key so the SPA's
-            # AI uses the same credential as the in-Splunk advisor (engine prefers
-            # this header over its own env key). Harmless on non-AI requests.
-            key = _ucc_key(session_key)
+            # Unify AI key + per-function models from the Configuration page: hand the
+            # engine the key (same credential as the in-Splunk advisor) and the chat /
+            # build / completion model choices so the SPA picks them up via /api/ai/config.
+            ucc_ai = _ucc_ai(session_key)
+            key = ucc_ai.get("api_key")
             if key:
                 headers["X-OpenRouter-Key"] = key
+            for hdr, field in (("X-Chat-Model", "model"), ("X-Build-Model", "build_model"),
+                               ("X-Completion-Model", "completion_model")):
+                val = ucc_ai.get(field)
+                if val:
+                    headers[hdr] = str(val)
 
             r = urllib.request.Request(url, data=data, method=method, headers=headers)
             ctx = ssl.create_default_context()
