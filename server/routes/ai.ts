@@ -1,4 +1,5 @@
 import { Router, Request, Response } from 'express';
+import { Readable } from 'node:stream';
 import { resolveModelProfile } from '../../src/lib/ai/modelProfile.js';
 import { VirtualFileSystem } from '../../src/lib/vfs.js';
 import { sessionState, type Todo, type Decision } from '../../src/lib/ai/sessionState.js';
@@ -200,6 +201,13 @@ router.post('/ai/chat', async (req: Request, res: Response) => {
     });
   }
 
+  // When the client requests a streamed completion (stream: true) we pass OpenRouter's
+  // SSE response straight through. The embedded client-side agent loop relies on this:
+  // behind Splunk's buffering REST proxy it drives one round-trip per turn and parses
+  // the (buffered) SSE, so the upstream content-type and framing must be preserved
+  // rather than collapsed to a single JSON object via response.json().
+  const wantsStream = !!req.body?.stream;
+
   try {
     const response = await fetch('https://openrouter.ai/api/v1/chat/completions', {
       method: 'POST',
@@ -211,6 +219,20 @@ router.post('/ai/chat', async (req: Request, res: Response) => {
       },
       body: JSON.stringify(req.body),
     });
+
+    if (wantsStream && response.ok && response.body) {
+      res.status(response.status);
+      res.setHeader(
+        'Content-Type',
+        response.headers.get('content-type') || 'text/event-stream'
+      );
+      res.setHeader('Cache-Control', 'no-cache');
+      res.flushHeaders?.();
+      // undici (Node global fetch) exposes a web ReadableStream; bridge it to the
+      // Express response stream.
+      Readable.fromWeb(response.body as Parameters<typeof Readable.fromWeb>[0]).pipe(res);
+      return;
+    }
 
     const data = await response.json();
 

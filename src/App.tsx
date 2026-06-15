@@ -39,7 +39,13 @@ import { DEFAULT_WIZARD_STATE } from './types';
 type AppMode = 'welcome' | 'wizard' | 'import' | 'files' | 'loop';
 
 const AppContainer = styled.div`
-  height: 100vh;
+  /* Fill the mount point (#root), not the viewport. Standalone: html/body/#root are
+     height:100% so this equals the viewport. Embedded in a Splunk dashboard the SPA is
+     mounted at a vertical offset below the app chrome; ui_loader.js sizes #root to the
+     remaining visible height, so 100% keeps the whole shell — including the Monaco
+     editor — on-screen and scrollable. Using 100vh here pushed the editor below the
+     fold where, with overflow:hidden, its lower content was unreachable. */
+  height: 100%;
   display: flex;
   flex-direction: column;
   overflow: hidden;

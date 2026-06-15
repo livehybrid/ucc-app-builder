@@ -42,6 +42,14 @@ project, never the Splunk filesystem. Architecture: [`architecture_diagram.md`](
 deep dive + the five SDK-in-Splunk gotchas: [`docs/SPLUNK-APP-PLAN.md`](docs/SPLUNK-APP-PLAN.md);
 build/deploy: [`splunk-app/deploy/build_agent_app.sh`](splunk-app/deploy/build_agent_app.sh).
 
+**One key, configured the Splunk way.** The native app ships a standard **UCC
+Configuration page** (`globalConfig.json` → **AI Provider** tab) where you pick the
+provider (OpenRouter/OpenAI/Anthropic/Google), paste the API key, and set the model and
+temperature. The key is stored **encrypted in `storage/passwords`** (via solnlib) and read
+back by **both** Splunk-AI surfaces — the in-app SPA's chat (through the REST proxy, which
+injects it as `X-OpenRouter-Key`) and the `splunklib.ai` Advisor — so there is a single,
+unified credential and **no secret in any .conf**.
+
 ## What's agentic here — one tool-calling agent
 
 The centrepiece is a single **planner/executor tool-calling agent**
@@ -423,7 +431,7 @@ npx tsx scripts/agent-cli.ts --json "…"              # machine-readable result
 ## Tests & checks
 
 ```bash
-npm run test:run    # vitest — 305 unit tests (incl. AppInspect policy + clean-package regressions)
+npm run test:run    # vitest — 459 unit tests (incl. AppInspect policy + clean-package regressions)
 npm run typecheck   # tsc --noEmit (frontend)
 npm run build:server# tsc -p server/tsconfig.json (backend incl. loop + MCP)
 npm run build       # production frontend bundle
@@ -464,6 +472,12 @@ and a Playwright `e2e` job.
 Scoped out of this round on purpose; the research and target architecture are in
 [`docs/research/`](./docs/research/):
 
+- **Generate CI/CD for the built add-on** — when the agent connects an add-on to GitHub,
+  emit a ready-to-run **GitHub Actions workflow** that builds (`ucc-gen`), validates
+  (`splunk-appinspect`) and optionally publishes it — wiring the generated add-on into the
+  same shared **[`livehybrid/deploy-splunk-app-action`](https://github.com/livehybrid/deploy-splunk-app-action)**
+  pipeline this repo already uses, so every add-on the builder produces ships with the same
+  build/validate/release loop out of the box.
 - **Two-model planner/executor routing** — distinct planner vs executor models per
   `modelProfile.ts` (the seam exists; the bench currently runs one profile end-to-end).
 - **Firecracker / microVM sandbox** for the build+inspect step (today it runs ucc-gen and

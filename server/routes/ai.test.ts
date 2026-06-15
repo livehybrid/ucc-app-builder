@@ -34,6 +34,40 @@ function httpPost(url: string, body: unknown): Promise<{ status: number; body: s
   });
 }
 
+function httpPostFull(
+  url: string,
+  body: unknown,
+): Promise<{ status: number; body: string; contentType: string }> {
+  return new Promise((resolve, reject) => {
+    const data = JSON.stringify(body);
+    const u = new URL(url);
+    const req = http.request(
+      {
+        hostname: u.hostname,
+        port: u.port,
+        path: u.pathname,
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'Content-Length': Buffer.byteLength(data) },
+      },
+      (res) => {
+        let chunks = '';
+        res.setEncoding('utf-8');
+        res.on('data', (c) => (chunks += c));
+        res.on('end', () =>
+          resolve({
+            status: res.statusCode ?? 0,
+            body: chunks,
+            contentType: String(res.headers['content-type'] || ''),
+          }),
+        );
+      },
+    );
+    req.on('error', reject);
+    req.write(data);
+    req.end();
+  });
+}
+
 function httpGet(url: string): Promise<{ status: number; body: string }> {
   return new Promise((resolve, reject) => {
     const u = new URL(url);
@@ -329,5 +363,66 @@ describe('GET /api/ai/config — MCP grounding flag', () => {
       if (prev === undefined) delete process.env.AGENT_MCP_GROUNDING;
       else process.env.AGENT_MCP_GROUNDING = prev;
     }
+  });
+});
+
+describe('POST /api/ai/chat — streaming pass-through', () => {
+  let realFetch: typeof globalThis.fetch;
+
+  beforeEach(() => {
+    realFetch = globalThis.fetch;
+  });
+  afterEach(() => {
+    globalThis.fetch = realFetch;
+  });
+
+  it('pipes OpenRouter SSE straight through when stream:true (so the embedded client-side agent loop gets per-turn frames behind the buffering Splunk proxy)', async () => {
+    const frames = [
+      'data: {"choices":[{"delta":{"content":"hel"}}]}\n\n',
+      'data: {"choices":[{"delta":{"content":"lo"}}]}\n\n',
+      'data: [DONE]\n\n',
+    ];
+    globalThis.fetch = vi.fn(async () => {
+      const stream = new ReadableStream<Uint8Array>({
+        start(controller) {
+          const enc = new TextEncoder();
+          for (const f of frames) controller.enqueue(enc.encode(f));
+          controller.close();
+        },
+      });
+      return {
+        ok: true,
+        status: 200,
+        headers: new Headers({ 'content-type': 'text/event-stream' }),
+        body: stream,
+        json: async () => ({}),
+      } as unknown as Response;
+    }) as unknown as typeof globalThis.fetch;
+
+    const res = await httpPostFull(`${baseUrl}/api/ai/chat`, {
+      model: 'x',
+      messages: [],
+      stream: true,
+    });
+
+    expect(res.status).toBe(200);
+    expect(res.contentType).toContain('text/event-stream');
+    expect(res.body).toContain('"content":"hel"');
+    expect(res.body).toContain('[DONE]');
+  });
+
+  it('returns a single JSON completion when stream is not requested', async () => {
+    globalThis.fetch = vi.fn(async () => ({
+      ok: true,
+      status: 200,
+      headers: new Headers({ 'content-type': 'application/json' }),
+      json: async () => ({ choices: [{ message: { content: 'hi' } }] }),
+    } as unknown as Response)) as unknown as typeof globalThis.fetch;
+
+    const res = await httpPostFull(`${baseUrl}/api/ai/chat`, { model: 'x', messages: [] });
+
+    expect(res.status).toBe(200);
+    expect(res.contentType).toContain('application/json');
+    expect(JSON.parse(res.body).choices[0].message.content).toBe('hi');
   });
 });

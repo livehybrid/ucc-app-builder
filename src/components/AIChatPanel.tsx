@@ -1325,6 +1325,18 @@ export function AIChatPanel({
 
     const isServerManaged = aiConfig?.serverManaged ?? false;
 
+    // When embedded in Splunk, every /api call is forwarded by a persistent REST
+    // proxy that must return its whole payload at once — it cannot stream SSE
+    // incrementally. The server-managed SSE loop (streamServerAgentLoop) therefore
+    // arrives buffered: one burst at completion, with the duplicate-message artefacts
+    // that come from re-flushing accumulated deltas. So when proxied we drive the
+    // agent loop CLIENT-side instead: one buffered round-trip per turn, with each
+    // assistant message and tool result rendered as it happens (genuine step-by-step
+    // progress). Server-managed credentials still apply — the client loop posts to
+    // /api/ai/chat and the proxy injects the key, so no client API key is needed.
+    const isProxied = (window as unknown as { __UCC_PROXIED__?: boolean }).__UCC_PROXIED__ === true;
+    const useServerStream = isServerManaged && !isProxied;
+
     if (!isServerManaged && !apiKey) {
       setError('Please set your OpenRouter API key in Settings first.');
       setShowSettings(true);
@@ -1378,7 +1390,7 @@ export function AIChatPanel({
     ];
 
     try {
-      if (isServerManaged) {
+      if (useServerStream) {
         const systemContent = buildSystemMessage();
         const contextMessages = newMessages.length > 20 ? newMessages.slice(-20) : newMessages;
         let systemPrefix = '';
