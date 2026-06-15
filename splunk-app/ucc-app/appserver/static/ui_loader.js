@@ -16,6 +16,13 @@ require(['jquery', 'splunkjs/mvc/simplexml/ready!'], function ($) {
   //    flows through the single interceptor below.
   window.__UCC_API_BASE__ = '/api';
 
+  // Tell the SPA it is running behind the buffering Splunk REST proxy. A persistent
+  // REST handler must return its whole payload at once, so it CANNOT stream SSE
+  // incrementally — the server-managed agent loop would otherwise arrive as one burst
+  // at completion. The AI panel uses this flag to drive its agent loop client-side
+  // (one buffered round-trip per turn) so progress appears step by step instead.
+  window.__UCC_PROXIED__ = true;
+
   // Splunk Web protects POST/PUT/DELETE through /splunkd/__raw/ with a CSRF token —
   // the value of the `splunkweb_csrf_token_<port>` cookie, sent as X-Splunk-Form-Key.
   // CRITICAL: a browser may hold tokens for MULTIPLE Splunk ports (e.g. 8000 AND 8001);
@@ -88,4 +95,24 @@ require(['jquery', 'splunkjs/mvc/simplexml/ready!'], function ($) {
   var js = document.createElement('script');
   js.type = 'module'; js.src = staticBase + '/ui/app.js';
   document.body.appendChild(js);
+
+  // 5) Give #root a DEFINITE height = the space from its top edge to the bottom of the
+  //    viewport. The SPA shell (and the Monaco editor inside it) is height:100%, which
+  //    only resolves against a parent with a concrete height. Inside the Splunk
+  //    dashboard #root sits below the app chrome at a variable offset, so we measure it
+  //    rather than guessing a fixed inset. Without this the shell was 100vh tall, its
+  //    lower part (the editor) fell below the fold, and overflow:hidden made that
+  //    content unreachable. Recompute on resize and after the chrome settles.
+  function sizeRoot() {
+    var top = root.getBoundingClientRect().top + (window.scrollY || 0);
+    var h = Math.max(320, window.innerHeight - top);
+    root.style.height = h + 'px';
+    root.style.minHeight = '0';
+    root.style.overflow = 'hidden';
+  }
+  sizeRoot();
+  window.addEventListener('resize', sizeRoot);
+  // The Splunk header/nav can lay out a frame or two after ready!; re-measure so the
+  // editor lines up with the real available height.
+  [100, 400, 1000].forEach(function (ms) { setTimeout(sizeRoot, ms); });
 });

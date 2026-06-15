@@ -1,5 +1,9 @@
 /* Give the embedded SPA room to breathe inside the Splunk dashboard chrome. */
 .dashboard-body .panel-body.html { padding: 0; }
+/* Pre-JS fallback height only; ui_loader.js then sets an exact pixel height equal to
+   the space from #root's top to the viewport bottom (and keeps it correct on resize),
+   so the height:100% SPA shell — and the Monaco editor inside it — stays on-screen and
+   scrolls internally instead of overflowing below the fold. */
 #root { min-height: calc(100vh - 120px); width: 100%; }
 /* The standalone app draws its own full-height shell; let it fill the panel. */
 .dashboard-row, .dashboard-panel, .panel-element-row { margin: 0 !important; }
