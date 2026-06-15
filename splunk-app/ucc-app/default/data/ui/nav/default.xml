@@ -1,0 +1,4 @@
+<nav>
+  <view name="home" default="true" icon="layout" />
+  <view name="configuration" icon="cog" />
+</nav>

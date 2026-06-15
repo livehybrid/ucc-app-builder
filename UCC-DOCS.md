@@ -1,0 +1,1 @@
+https://splunk.github.io/addonfactory-ucc-generator/

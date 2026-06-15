@@ -1,0 +1,11 @@
+<dashboard version="1.1" script="ui_loader.js" stylesheet="ui_loader.css">
+  <label>UCC App Builder</label>
+  <description>Agentic Splunk add-on builder — full IDE running inside Splunk on the Splunk Agent SDK.</description>
+  <row>
+    <panel>
+      <html>
+        <div id="root"><div style="padding:20px;color:#5c6773">Loading UCC App Builder…</div></div>
+      </html>
+    </panel>
+  </row>
+</dashboard>

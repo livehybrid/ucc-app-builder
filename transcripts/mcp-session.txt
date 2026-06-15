@@ -1,0 +1,248 @@
+=== UCC App Builder — MCP server JSON-RPC session ===
+
+>>> REQUEST  initialize
+{
+  "jsonrpc": "2.0",
+  "id": 1,
+  "method": "initialize",
+  "params": {
+    "protocolVersion": "2024-11-05",
+    "capabilities": {},
+    "clientInfo": {
+      "name": "mcp-record",
+      "version": "0.0.0"
+    }
+  }
+}
+UCC App Builder MCP server ready (stdio).
+<<< RESPONSE initialize
+{
+  "result": {
+    "protocolVersion": "2024-11-05",
+    "capabilities": {
+      "tools": {}
+    },
+    "serverInfo": {
+      "name": "ucc-app-builder",
+      "version": "0.1.0"
+    }
+  },
+  "jsonrpc": "2.0",
+  "id": 1
+}
+
+>>> REQUEST  tools/list
+{
+  "jsonrpc": "2.0",
+  "id": 2,
+  "method": "tools/list",
+  "params": {}
+}
+<<< RESPONSE tools/list
+{
+  "result": {
+    "tools": [
+      {
+        "name": "create_addon",
+        "description": "Create a new Splunk UCC add-on project (in memory). Resets any current project. Provide a name; appId is derived (TA_<name>). Returns the project summary.",
+        "inputSchema": {
+          "type": "object",
+          "properties": {
+            "name": {
+              "type": "string",
+              "description": "Add-on name, e.g. \"github_audit\"."
+            },
+            "displayName": {
+              "type": "string",
+              "description": "Human display name."
+            },
+            "description": {
+              "type": "string"
+            },
+            "version": {
+              "type": "string",
+              "description": "Semver, default 1.0.0."
+            }
+          },
+          "required": [
+            "name"
+          ]
+        }
+      },
+      {
+        "name": "add_input",
+        "description": "Add a modular input (data collection) to the current add-on. Creates the input definition + Python handler/helper. Provide a name and optional fields.",
+        "inputSchema": {
+          "type": "object",
+          "properties": {
+            "name": {
+              "type": "string",
+              "description": "Input name (internal id), e.g. \"github_repos\"."
+            },
+            "title": {
+              "type": "string",
+              "description": "Display title."
+            },
+            "fields": {
+              "type": "array",
+              "description": "Optional extra config fields for the input.",
+              "items": {
+                "type": "object",
+                "properties": {
+                  "field": {
+                    "type": "string"
+                  },
+                  "label": {
+                    "type": "string"
+                  },
+                  "type": {
+                    "type": "string",
+                    "description": "text | password | checkbox | singleSelect | ..."
+                  },
+                  "required": {
+                    "type": "boolean"
+                  }
+                },
+                "required": [
+                  "field",
+                  "label"
+                ]
+              }
+            }
+          },
+          "required": [
+            "name"
+          ]
+        }
+      },
+      {
+        "name": "validate_app",
+        "description": "Run the agentic loop: ucc-gen build -> splunk-appinspect -> auto-fix -> repeat until AppInspect-clean. Returns the loop trace and final report. This is where the self-correction happens. Set maxIterations / includeWarnings to tune.",
+        "inputSchema": {
+          "type": "object",
+          "properties": {
+            "maxIterations": {
+              "type": "number"
+            },
+            "includeWarnings": {
+              "type": "boolean"
+            },
+            "useLlm": {
+              "type": "boolean",
+              "description": "Allow LLM fixer (needs OPENROUTER_API_KEY)."
+            }
+          }
+        }
+      },
+      {
+        "name": "package_app",
+        "description": "Build + AppInspect-validate (with auto-fix) and return the path to a clean .tar.gz package ready to install into Splunk. Runs the loop, then reports the tarball.",
+        "inputSchema": {
+          "type": "object",
+          "properties": {}
+        }
+      },
+      {
+        "name": "list_project",
+        "description": "List the files in the current add-on project (generated from its definition).",
+        "inputSchema": {
+          "type": "object",
+          "properties": {}
+        }
+      }
+    ]
+  },
+  "jsonrpc": "2.0",
+  "id": 2
+}
+
+>>> REQUEST  tools/call
+{
+  "jsonrpc": "2.0",
+  "id": 3,
+  "method": "tools/call",
+  "params": {
+    "name": "create_addon",
+    "arguments": {
+      "name": "github_audit",
+      "displayName": "GitHub Audit",
+      "version": "1.0.0"
+    }
+  }
+}
+<<< RESPONSE tools/call
+{
+  "result": {
+    "content": [
+      {
+        "type": "text",
+        "text": "Created add-on project.\n  appId: TA_github_audit\n  displayName: GitHub Audit\n  version: 1.0.0\n\nNext: add_input, then validate_app / package_app."
+      }
+    ]
+  },
+  "jsonrpc": "2.0",
+  "id": 3
+}
+
+>>> REQUEST  tools/call
+{
+  "jsonrpc": "2.0",
+  "id": 4,
+  "method": "tools/call",
+  "params": {
+    "name": "add_input",
+    "arguments": {
+      "name": "github_repos",
+      "title": "GitHub Repos",
+      "fields": [
+        {
+          "field": "api_token",
+          "label": "API Token",
+          "type": "password",
+          "required": true
+        }
+      ]
+    }
+  }
+}
+<<< RESPONSE tools/call
+{
+  "result": {
+    "content": [
+      {
+        "type": "text",
+        "text": "Added input \"github_repos\" (1 extra field(s)). Project now has 1 input(s)."
+      }
+    ]
+  },
+  "jsonrpc": "2.0",
+  "id": 4
+}
+
+>>> REQUEST  tools/call
+{
+  "jsonrpc": "2.0",
+  "id": 5,
+  "method": "tools/call",
+  "params": {
+    "name": "package_app",
+    "arguments": {
+      "useLlm": false
+    }
+  }
+}
+<<< RESPONSE tools/call
+{
+  "result": {
+    "content": [
+      {
+        "type": "text",
+        "text": "package_app for TA_github_audit: AppInspect-CLEAN ✅ after 2 iteration(s).\n\n--- loop trace ---\n  [it0] start: Starting agentic loop for TA_github_audit (maxIterations=4, includeWarnings=true, llm=false).\n  [it1] iteration: --- Iteration 1 ---\n  [it1] build: ucc-gen build + package OK -> TA_github_audit-1.0.0.tar.gz\n  [it1] inspect: AppInspect: 1 actionable check(s).\n  [it1] fix: [rule] check_for_updates_disabled: Set meta.checkForUpdates=false in globalConfig.json.\n  [it2] iteration: --- Iteration 2 ---\n  [it2] build: ucc-gen build + package OK -> TA_github_audit-1.0.0.tar.gz\n  [it2] inspect: AppInspect: 0 actionable check(s).\n  [it2] clean: Package is AppInspect-clean (no failures/warnings).\n  [it2] done: Loop finished: CLEAN.\n\n--- final ---\nAppInspect (cli):\n  error: 0\n  failure: 0\n  future_failure: 2\n  skipped: 0\n  not_applicable: 118\n  warning: 14\n  success: 115\n\nPackage: <tmp>/TA_github_audit-1.0.0.tar.gz"
+      }
+    ]
+  },
+  "jsonrpc": "2.0",
+  "id": 5
+}
+
+=== session complete ===

@@ -1,0 +1,5 @@
+/* Give the embedded SPA room to breathe inside the Splunk dashboard chrome. */
+.dashboard-body .panel-body.html { padding: 0; }
+#root { min-height: calc(100vh - 120px); width: 100%; }
+/* The standalone app draws its own full-height shell; let it fill the panel. */
+.dashboard-row, .dashboard-panel, .panel-element-row { margin: 0 !important; }

@@ -1,0 +1,39 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8" />
+  <style>html, body, #ed { height: 100%; width: 100%; margin: 0; padding: 0; }</style>
+</head>
+<body>
+  <div id="ed"></div>
+  <!-- Monaco ships its own AMD loader. Loading it inside this isolated iframe avoids
+       any conflict with Splunk Web's RequireJS in the parent page. -->
+  <script src="vendor/monaco/vs/loader.js"></script>
+  <script>
+    require.config({ paths: { vs: 'vendor/monaco/vs' } });
+    require(['vs/editor/editor.main'], function () {
+      var editor = monaco.editor.create(document.getElementById('ed'), {
+        value: '',
+        language: 'json',
+        automaticLayout: true,
+        minimap: { enabled: false },
+        scrollBeyondLastLine: false,
+        fontSize: 12,
+        theme: 'vs'
+      });
+      window.addEventListener('message', function (e) {
+        var m = e.data || {};
+        if (m.type === 'set') {
+          editor.setValue(m.value || '');
+          if (m.language) { monaco.editor.setModelLanguage(editor.getModel(), m.language); }
+        } else if (m.type === 'get') {
+          parent.postMessage({ type: 'content', reqId: m.reqId, value: editor.getValue() }, '*');
+        } else if (m.type === 'theme') {
+          monaco.editor.setTheme(m.value || 'vs');
+        }
+      });
+      parent.postMessage({ type: 'monaco-ready' }, '*');
+    });
+  </script>
+</body>
+</html>

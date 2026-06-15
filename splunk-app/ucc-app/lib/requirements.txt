@@ -1,0 +1,11 @@
+# UI add-on: ucc-gen requires splunktaucclib (>=8.2.0 for Splunk 10 / ucc-gen 6.5).
+splunktaucclib>=8.2.0
+# Splunk Agent SDK engine deps (PyPI). NOTE: splunk-sdk 3.0.0 (which provides
+# splunklib.ai) is NOT on public PyPI yet, so splunklib is vendored under lib/
+# splunklib/ (Apache-2.0, from the splunk-sdk 3.0.0 wheel). py3.13 required.
+langchain>=1.2.15
+langchain-openai>=1.1.13
+langgraph>=1.1.1
+pydantic>=2.13.2
+uuid-utils>=0.14.1
+mcp>=1.27.0

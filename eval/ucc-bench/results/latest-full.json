@@ -1,0 +1,285 @@
+{
+  "mode": "full",
+  "profile": "anthropic-multi",
+  "models": {
+    "planner": "anthropic/claude-opus-4.5",
+    "executor": "anthropic/claude-sonnet-4.5",
+    "router": "anthropic/claude-haiku-4.5"
+  },
+  "tasks": [
+    {
+      "task": "adaptive-response-notable",
+      "appId": "TA_adaptive_response_demo",
+      "passed": true,
+      "grades": {
+        "syntax": true,
+        "build": true,
+        "appinspect": true
+      },
+      "reasons": [
+        "syntax + build + appinspect all clean"
+      ],
+      "loopIterations": 1,
+      "agentIterations": 20,
+      "finalSummary": "AppInspect (cli):\n  error: 0\n  failure: 0\n  future_failure: 0\n  skipped: 0\n  not_applicable: 161\n  warning: 7\n  success: 81",
+      "toolCalls": [
+        "list_files",
+        "read_file",
+        "write_file",
+        "list_files",
+        "read_file",
+        "write_file",
+        "apply_patch",
+        "apply_patch",
+        "get_splunklib_help",
+        "get_splunk_sdk_reference",
+        "read_file",
+        "list_files",
+        "read_file",
+        "create_file",
+        "list_files",
+        "list_files",
+        "create_file",
+        "validate_ucc_conformance",
+        "build_and_inspect",
+        "read_file"
+      ],
+      "finalFiles": [
+        "/globalConfig.json",
+        "/package/app.manifest",
+        "/package/bin/create_incident_payload.py",
+        "/package/bin/import_declare_test.py",
+        "/package/default/app.conf",
+        "/package/default/data/ui/nav/default.xml",
+        "/package/lib/README",
+        "/package/lib/requirements.txt",
+        "/package/metadata/default.meta",
+        "/package/README.txt"
+      ],
+      "buildLog": [
+        "[build] ucc-gen build + package OK -> TA_adaptive_response_demo-1.0.0.tar.gz",
+        "[inspect] AppInspect: 0 actionable check(s)."
+      ],
+      "agentBuildInspect": "AppInspect-CLEAN ✅ after 3 iteration(s).\n\nThe loop changed 3 source file(s) in your VFS:\n  - /globalConfig.json\n  - /package/lib/requirements.txt\n  - (deleted) /package/globalConfig.json\n\n--- loop trace ---\n  [it0] fix: Removed stray /package/globalConfig.json (globalConfig.json must be at the add-on root, not under package/).\n  [it0] start: Starting agentic loop for TA_adaptive_response_demo (maxIterations=4, includeWarnings=true, llm=true).\n  [it1] iteration: --- Iteration 1 ---\n  [it1] build_error: Build failed: ucc-gen build failed with code 1\n  [it1] fix: [rule] build-error: Added splunktaucclib>=6.6.0,<9 and solnlib>=5.0.0,<8 (AArch64-safe pins) to package/lib/requirements.txt.\n  [it2] iteration: --- Iteration 2 ---\n  [it2] build: ucc-gen build + package OK -> TA_adaptive_response_demo-1.0.0.tar.gz\n  [it2] inspect: AppInspect: 1 actionable check(s).\n  [it2] fix: [rule] check_for_updates_disabled: Set meta.checkForUpdates=false in globalConfig.json.\n  [it3] iteration: --- Iteration 3 ---\n  [it3] build: ucc-gen build + package OK -> TA_adaptive_response_demo-1.0.0.tar.gz\n  [it3] inspect: AppInspect: 0 actionable check(s).\n  [it3] clean: Package is AppInspect-clean (no failures/",
+      "durationMs": 214375
+    },
+    {
+      "task": "alert-action-webhook",
+      "appId": "TA_alert_webhook_demo",
+      "passed": true,
+      "grades": {
+        "syntax": true,
+        "build": true,
+        "appinspect": true
+      },
+      "reasons": [
+        "syntax + build + appinspect all clean"
+      ],
+      "loopIterations": 1,
+      "agentIterations": 20,
+      "finalSummary": "AppInspect (cli):\n  error: 0\n  failure: 0\n  future_failure: 0\n  skipped: 0\n  not_applicable: 161\n  warning: 7\n  success: 81",
+      "toolCalls": [
+        "list_files",
+        "read_file",
+        "write_file",
+        "list_files",
+        "read_file",
+        "write_file",
+        "apply_patch",
+        "apply_patch",
+        "apply_patch",
+        "write_file",
+        "create_file",
+        "create_file",
+        "build_and_inspect",
+        "read_file",
+        "write_file",
+        "list_files",
+        "get_splunklib_help",
+        "get_splunklib_help",
+        "list_files",
+        "read_file"
+      ],
+      "finalFiles": [
+        "/globalConfig.json",
+        "/package/app.manifest",
+        "/package/bin/send_webhook.py",
+        "/package/bin/webhook_helper.py",
+        "/package/default/app.conf",
+        "/package/default/data/ui/nav/default.xml",
+        "/package/lib/README",
+        "/package/lib/requirements.txt",
+        "/package/metadata/default.meta",
+        "/package/README.txt"
+      ],
+      "buildLog": [
+        "[build] ucc-gen build + package OK -> TA_alert_webhook_demo-1.0.0.tar.gz",
+        "[inspect] AppInspect: 0 actionable check(s)."
+      ],
+      "agentBuildInspect": "AppInspect-CLEAN ✅ after 3 iteration(s).\n\nThe loop changed 3 source file(s) in your VFS:\n  - /globalConfig.json\n  - /package/lib/requirements.txt\n  - (deleted) /package/globalConfig.json\n\n--- loop trace ---\n  [it0] fix: Removed stray /package/globalConfig.json (globalConfig.json must be at the add-on root, not under package/).\n  [it0] start: Starting agentic loop for TA_alert_webhook_demo (maxIterations=4, includeWarnings=true, llm=true).\n  [it1] iteration: --- Iteration 1 ---\n  [it1] build_error: Build failed: ucc-gen build failed with code 1\n  [it1] fix: [rule] build-error: Added splunktaucclib>=6.6.0,<9 and solnlib>=5.0.0,<8 (AArch64-safe pins) to package/lib/requirements.txt.\n  [it2] iteration: --- Iteration 2 ---\n  [it2] build: ucc-gen build + package OK -> TA_alert_webhook_demo-1.0.0.tar.gz\n  [it2] inspect: AppInspect: 1 actionable check(s).\n  [it2] fix: [rule] check_for_updates_disabled: Set meta.checkForUpdates=false in globalConfig.json.\n  [it3] iteration: --- Iteration 3 ---\n  [it3] build: ucc-gen build + package OK -> TA_alert_webhook_demo-1.0.0.tar.gz\n  [it3] inspect: AppInspect: 0 actionable check(s).\n  [it3] clean: Package is AppInspect-clean (no failures/warnings).\n ",
+      "durationMs": 196297
+    },
+    {
+      "task": "custom-command-enrich",
+      "appId": "TA_command_enrich_demo",
+      "passed": true,
+      "grades": {
+        "syntax": true,
+        "build": true,
+        "appinspect": true
+      },
+      "reasons": [
+        "syntax + build + appinspect all clean"
+      ],
+      "loopIterations": 1,
+      "agentIterations": 10,
+      "finalSummary": "AppInspect (cli):\n  error: 0\n  failure: 0\n  future_failure: 1\n  skipped: 0\n  not_applicable: 156\n  warning: 7\n  success: 85",
+      "toolCalls": [
+        "list_files",
+        "list_files",
+        "read_file",
+        "create_file",
+        "create_file",
+        "build_and_inspect",
+        "read_file",
+        "read_file",
+        "read_file"
+      ],
+      "finalFiles": [
+        "/globalConfig.json",
+        "/package/app.manifest",
+        "/package/bin/http_enrich.py",
+        "/package/default/app.conf",
+        "/package/default/commands.conf",
+        "/package/default/data/ui/nav/default.xml",
+        "/package/lib/README",
+        "/package/lib/requirements.txt",
+        "/package/metadata/default.meta",
+        "/package/README.txt"
+      ],
+      "buildLog": [
+        "[build] ucc-gen build + package OK -> TA_command_enrich_demo-1.0.0.tar.gz",
+        "[inspect] AppInspect: 0 actionable check(s)."
+      ],
+      "agentBuildInspect": "AppInspect-CLEAN ✅ after 3 iteration(s).\n\nThe loop changed 2 source file(s) in your VFS:\n  - /globalConfig.json\n  - /package/lib/requirements.txt\n\n--- loop trace ---\n  [it0] start: Starting agentic loop for TA_command_enrich_demo (maxIterations=4, includeWarnings=true, llm=true).\n  [it1] iteration: --- Iteration 1 ---\n  [it1] build_error: Build failed: ucc-gen build failed with code 1\n  [it1] fix: [rule] build-error: Added splunktaucclib>=6.6.0,<9 and solnlib>=5.0.0,<8 (AArch64-safe pins) to package/lib/requirements.txt.\n  [it2] iteration: --- Iteration 2 ---\n  [it2] build: ucc-gen build + package OK -> TA_command_enrich_demo-1.0.0.tar.gz\n  [it2] inspect: AppInspect: 1 actionable check(s).\n  [it2] fix: [rule] check_for_updates_disabled: Set meta.checkForUpdates=false in globalConfig.json.\n  [it3] iteration: --- Iteration 3 ---\n  [it3] build: ucc-gen build + package OK -> TA_command_enrich_demo-1.0.0.tar.gz\n  [it3] inspect: AppInspect: 0 actionable check(s).\n  [it3] clean: Package is AppInspect-clean (no failures/warnings).\n  [it3] done: Loop finished: CLEAN.\n\n--- final report ---\nAppInspect (cli):\n  error: 0\n  failure: 0\n  future_failure: 1\n  skipped: 0\n  not_applicable: 156\n  warn",
+      "durationMs": 128128
+    },
+    {
+      "task": "oauth-client-credentials",
+      "appId": "TA_oauth_client_demo",
+      "passed": false,
+      "grades": {
+        "syntax": false,
+        "build": true,
+        "appinspect": true
+      },
+      "reasons": [
+        "no package/bin/*.py produced"
+      ],
+      "loopIterations": 1,
+      "agentIterations": 20,
+      "finalSummary": "AppInspect (cli):\n  error: 0\n  failure: 0\n  future_failure: 0\n  skipped: 0\n  not_applicable: 161\n  warning: 7\n  success: 81",
+      "toolCalls": [
+        "list_files",
+        "read_file",
+        "read_file",
+        "write_file",
+        "list_files",
+        "read_file",
+        "write_file",
+        "apply_patch",
+        "apply_patch",
+        "get_splunklib_help",
+        "get_splunk_sdk_reference",
+        "read_file",
+        "list_files",
+        "build_and_inspect",
+        "read_file",
+        "read_file",
+        "apply_patch",
+        "apply_patch",
+        "apply_patch",
+        "write_file",
+        "write_file"
+      ],
+      "finalFiles": [
+        "/globalConfig.json",
+        "/package/app.manifest",
+        "/package/default/app.conf",
+        "/package/default/data/ui/nav/default.xml",
+        "/package/lib/README",
+        "/package/lib/requirements.txt",
+        "/package/metadata/default.meta",
+        "/package/README.txt"
+      ],
+      "buildLog": [
+        "[build] ucc-gen build + package OK -> TA_oauth_client_demo-1.0.0.tar.gz",
+        "[inspect] AppInspect: 0 actionable check(s)."
+      ],
+      "agentBuildInspect": "AppInspect-CLEAN ✅ after 3 iteration(s).\n\nThe loop changed 3 source file(s) in your VFS:\n  - /globalConfig.json\n  - /package/lib/requirements.txt\n  - (deleted) /package/globalConfig.json\n\n--- loop trace ---\n  [it0] fix: Removed stray /package/globalConfig.json (globalConfig.json must be at the add-on root, not under package/).\n  [it0] start: Starting agentic loop for TA_oauth_client_demo (maxIterations=4, includeWarnings=true, llm=true).\n  [it1] iteration: --- Iteration 1 ---\n  [it1] build_error: Build failed: ucc-gen build failed with code 1\n  [it1] fix: [rule] build-error: Added splunktaucclib>=6.6.0,<9 and solnlib>=5.0.0,<8 (AArch64-safe pins) to package/lib/requirements.txt.\n  [it2] iteration: --- Iteration 2 ---\n  [it2] build: ucc-gen build + package OK -> TA_oauth_client_demo-1.0.0.tar.gz\n  [it2] inspect: AppInspect: 1 actionable check(s).\n  [it2] fix: [rule] check_for_updates_disabled: Set meta.checkForUpdates=false in globalConfig.json.\n  [it3] iteration: --- Iteration 3 ---\n  [it3] build: ucc-gen build + package OK -> TA_oauth_client_demo-1.0.0.tar.gz\n  [it3] inspect: AppInspect: 0 actionable check(s).\n  [it3] clean: Package is AppInspect-clean (no failures/warnings).\n  [i",
+      "durationMs": 274101
+    },
+    {
+      "task": "simple-rest-poll",
+      "appId": "TA_jsonplaceholder_demo",
+      "passed": true,
+      "grades": {
+        "syntax": true,
+        "build": true,
+        "appinspect": true
+      },
+      "reasons": [
+        "syntax + build + appinspect all clean"
+      ],
+      "loopIterations": 1,
+      "agentIterations": 20,
+      "finalSummary": "AppInspect (cli):\n  error: 0\n  failure: 0\n  future_failure: 0\n  skipped: 0\n  not_applicable: 161\n  warning: 7\n  success: 81",
+      "toolCalls": [
+        "list_files",
+        "read_file",
+        "write_file",
+        "list_files",
+        "list_files",
+        "write_file",
+        "apply_patch",
+        "apply_patch",
+        "get_splunklib_help",
+        "read_file",
+        "apply_patch",
+        "create_file",
+        "write_file",
+        "list_files",
+        "build_and_inspect",
+        "read_file",
+        "read_file",
+        "apply_patch",
+        "apply_patch",
+        "apply_patch"
+      ],
+      "finalFiles": [
+        "/globalConfig.json",
+        "/package/app.manifest",
+        "/package/bin/posts_input.py",
+        "/package/default/app.conf",
+        "/package/default/data/ui/nav/default.xml",
+        "/package/lib/README",
+        "/package/lib/requirements.txt",
+        "/package/metadata/default.meta",
+        "/package/README.txt"
+      ],
+      "buildLog": [
+        "[build] ucc-gen build + package OK -> TA_jsonplaceholder_demo-1.0.0.tar.gz",
+        "[inspect] AppInspect: 0 actionable check(s)."
+      ],
+      "agentBuildInspect": "AppInspect-CLEAN ✅ after 3 iteration(s).\n\nThe loop changed 3 source file(s) in your VFS:\n  - /globalConfig.json\n  - /package/lib/requirements.txt\n  - (deleted) /package/globalConfig.json\n\n--- loop trace ---\n  [it0] fix: Removed stray /package/globalConfig.json (globalConfig.json must be at the add-on root, not under package/).\n  [it0] start: Starting agentic loop for TA_jsonplaceholder_demo (maxIterations=4, includeWarnings=true, llm=true).\n  [it1] iteration: --- Iteration 1 ---\n  [it1] build_error: Build failed: ucc-gen build failed with code 1\n  [it1] fix: [rule] build-error: Added splunktaucclib>=6.6.0,<9 and solnlib>=5.0.0,<8 (AArch64-safe pins) to package/lib/requirements.txt.\n  [it2] iteration: --- Iteration 2 ---\n  [it2] build: ucc-gen build + package OK -> TA_jsonplaceholder_demo-1.0.0.tar.gz\n  [it2] inspect: AppInspect: 1 actionable check(s).\n  [it2] fix: [rule] check_for_updates_disabled: Set meta.checkForUpdates=false in globalConfig.json.\n  [it3] iteration: --- Iteration 3 ---\n  [it3] build: ucc-gen build + package OK -> TA_jsonplaceholder_demo-1.0.0.tar.gz\n  [it3] inspect: AppInspect: 0 actionable check(s).\n  [it3] clean: Package is AppInspect-clean (no failures/warnin",
+      "durationMs": 232272
+    }
+  ],
+  "passRate": 0.8,
+  "scores": {
+    "syntax": 0.8,
+    "build": 1,
+    "appinspect": 1
+  },
+  "timestamp": "2026-06-05T13:35:32.215Z"
+}

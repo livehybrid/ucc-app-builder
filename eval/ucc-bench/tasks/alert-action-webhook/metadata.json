@@ -1,0 +1,5 @@
+{
+  "difficulty": "medium",
+  "tags": ["alert-action", "webhook", "ucc-framework"],
+  "description": "Create a UCC alert action that posts triggered results to a configurable webhook endpoint."
+}
