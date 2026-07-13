@@ -246,8 +246,9 @@ export class UCCGenService {
     }
     if (!gcRaw) return; // no globalConfig — let ucc-gen surface its own error
     try {
-      const appId = JSON.parse(gcRaw)?.meta?.name || path.basename(workDir);
-      const manifest = appManifestFromGlobalConfig(gcRaw, appId);
+      const globalConfig = JSON.parse(gcRaw);
+      const appId = globalConfig?.meta?.name || path.basename(workDir);
+      const manifest = appManifestFromGlobalConfig(globalConfig, appId);
       await fs.mkdir(pkgDir, { recursive: true });
       await fs.writeFile(manifestPath, JSON.stringify(manifest, null, 2), 'utf-8');
       onLog('Generated required package/app.manifest from globalConfig.json (ucc-gen does not create it).');
