@@ -10,6 +10,13 @@ updates:
     labels:
       - "dependencies"
       - "automated"
+    ignore:
+      # eslint-plugin-react-refresh 0.5.x drops ESLint 8 support (peer: eslint
+      # ^9 || ^10). This project is pinned to eslint ^8.57.0, so 0.5.x breaks
+      # `npm ci` with an ERESOLVE peer conflict. Hold at 0.4.x until we migrate
+      # the toolchain to ESLint 9 (flat config + @typescript-eslint v8).
+      - dependency-name: "eslint-plugin-react-refresh"
+        versions: [">=0.5.0"]
     groups:
       minor-and-patch:
         update-types:
