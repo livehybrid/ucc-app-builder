@@ -258,7 +258,9 @@ describe('analyzeImportedFiles (shared core for ZIP + seed-from-installed)', () 
     const analysis = await analyzeImportedFiles([
       {
         path: 'ta_demo/globalConfig.json',
-        content: JSON.stringify({ meta: { name: 'ta_demo', displayName: 'Demo TA', version: '2.3.0' } }),
+        content: JSON.stringify({
+          meta: { name: 'ta_demo', displayName: 'Demo TA', version: '2.3.0' },
+        }),
       },
       { path: 'ta_demo/package/bin/ta_demo.py', content: 'print(1)\n' },
       { path: 'ta_demo/default/props.conf', content: '[ta:demo]\nSHOULD_LINEMERGE = false\n' },
@@ -268,14 +270,19 @@ describe('analyzeImportedFiles (shared core for ZIP + seed-from-installed)', () 
     expect(analysis.version).toBe('2.3.0');
     expect(analysis.isUCCApp).toBe(true);
     // globalConfig is classified source; checksums are computed for every file.
-    expect(analysis.files.every((f) => typeof f.checksum === 'string' && f.checksum.length > 0)).toBe(true);
+    expect(
+      analysis.files.every((f) => typeof f.checksum === 'string' && f.checksum.length > 0)
+    ).toBe(true);
     const gc = analysis.files.find((f) => f.path.endsWith('globalConfig.json'));
     expect(gc?.origin).toBe('source');
   });
 
   it('falls back to app.conf + path when no globalConfig.json is present', async () => {
     const analysis = await analyzeImportedFiles([
-      { path: 'legacy_app/default/app.conf', content: '[launcher]\nversion = 9.9.9\n[ui]\nlabel = Legacy App\n' },
+      {
+        path: 'legacy_app/default/app.conf',
+        content: '[launcher]\nversion = 9.9.9\n[ui]\nlabel = Legacy App\n',
+      },
       { path: 'legacy_app/bin/run.py', content: '# x\n' },
     ]);
     expect(analysis.appId).toBe('legacy_app');

@@ -1,7 +1,6 @@
 import { Tool } from '../toolTypes';
 
-const API_BASE =
-  (window as unknown as { __UCC_API_BASE__?: string }).__UCC_API_BASE__ || '/api';
+const API_BASE = (window as unknown as { __UCC_API_BASE__?: string }).__UCC_API_BASE__ || '/api';
 
 function appIdOf(vfs: { getAllFiles(): Array<{ path: string; content: string }> }): string {
   const files = vfs.getAllFiles();

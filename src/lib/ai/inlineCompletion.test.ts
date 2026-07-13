@@ -3,7 +3,11 @@ import { buildMessages, cleanCompletion } from './inlineCompletion';
 
 describe('buildMessages (FIM prompt)', () => {
   it('wraps prefix/suffix and names the language', () => {
-    const msgs = buildMessages({ prefix: '[input://x]\n', suffix: '\ndisabled = 0', language: 'splunk-conf' });
+    const msgs = buildMessages({
+      prefix: '[input://x]\n',
+      suffix: '\ndisabled = 0',
+      language: 'splunk-conf',
+    });
     expect(msgs[0].role).toBe('system');
     expect(msgs[0].content).toMatch(/\.conf/);
     expect(msgs[1].content).toContain('<PREFIX>[input://x]\n</PREFIX>');
@@ -28,7 +32,9 @@ describe('cleanCompletion', () => {
 
   it('drops an echoed prefix overlap', () => {
     // model echoed the last bit of the prefix before its continuation
-    expect(cleanCompletion('index = main\nsourcetype = x', 'index = ')).toBe('main\nsourcetype = x');
+    expect(cleanCompletion('index = main\nsourcetype = x', 'index = ')).toBe(
+      'main\nsourcetype = x'
+    );
   });
 
   it('removes a stray leading newline', () => {

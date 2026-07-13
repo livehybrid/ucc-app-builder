@@ -1,7 +1,6 @@
 import { Tool } from '../toolTypes';
 
-const API_BASE =
-  (window as unknown as { __UCC_API_BASE__?: string }).__UCC_API_BASE__ || '/api';
+const API_BASE = (window as unknown as { __UCC_API_BASE__?: string }).__UCC_API_BASE__ || '/api';
 
 function appIdOf(vfs: { getAllFiles(): Array<{ path: string; content: string }> }): string {
   const files = vfs.getAllFiles();
@@ -58,8 +57,14 @@ export const generateDashboard: Tool = {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(args),
       });
-      const d = (await res.json()) as { ok?: boolean; path?: string; content?: string; error?: string };
-      if (!d.ok || !d.path || !d.content) return `Error: ${d.error || 'dashboard generation failed'}`;
+      const d = (await res.json()) as {
+        ok?: boolean;
+        path?: string;
+        content?: string;
+        error?: string;
+      };
+      if (!d.ok || !d.path || !d.content)
+        return `Error: ${d.error || 'dashboard generation failed'}`;
       const full = `${appIdOf(vfs)}/${d.path}`;
       vfs.writeFile(full, d.content, 'user');
       return `Created Dashboard Studio dashboard at ${full}.`;

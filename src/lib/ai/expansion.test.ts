@@ -16,7 +16,9 @@ const GOOD = JSON.stringify({
   account: {
     authType: 'api_key',
     multipleAccounts: true,
-    fields: [{ name: 'api_key', label: 'API Key', type: 'password', required: true, encrypted: true }],
+    fields: [
+      { name: 'api_key', label: 'API Key', type: 'password', required: true, encrypted: true },
+    ],
   },
   proxy: true,
   loggingLevel: true,
@@ -85,7 +87,10 @@ describe('parseSpec', () => {
       appId: 'TA_x',
       name: 'X',
       account: { authType: 'none', fields: [{ type: 'text' }, { name: 'ok', type: 'text' }] },
-      inputs: [{ collection: 'rest_api', fields: [] }, { name: 'good', fields: [] }],
+      inputs: [
+        { collection: 'rest_api', fields: [] },
+        { name: 'good', fields: [] },
+      ],
     });
     const s = parseSpec(raw);
     expect(s.account.fields.map((f) => f.name)).toEqual(['ok']);
@@ -135,7 +140,9 @@ describe('renderBuildInstruction', () => {
 
 describe('expansionUserPrompt', () => {
   it('includes grounding when provided and flags absence otherwise', () => {
-    expect(expansionUserPrompt('build x', { indexes: ['web', 'main'] })).toMatch(/AVAILABLE INDEXES: web, main/);
+    expect(expansionUserPrompt('build x', { indexes: ['web', 'main'] })).toMatch(
+      /AVAILABLE INDEXES: web, main/
+    );
     expect(expansionUserPrompt('build x')).toMatch(/not grounded|No live Splunk/i);
   });
 });
