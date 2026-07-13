@@ -109,10 +109,7 @@ export function buildDashboardDefinition(spec: DashboardSpec): Record<string, un
 }
 
 function xmlEscape(s: string): string {
-  return s
-    .replace(/&/g, '&amp;')
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;');
+  return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
 }
 
 /** Build the `data/ui/views/<name>.xml` Dashboard Studio (version 2) view. */
@@ -161,7 +158,13 @@ export interface SavedSearchSpec {
   /** Alerting (implies a schedule). */
   alert?: {
     /** number of results threshold, e.g. "greater than 0" */
-    condition?: 'greater than' | 'less than' | 'equal to' | 'not equal to' | 'rises by' | 'drops by';
+    condition?:
+      | 'greater than'
+      | 'less than'
+      | 'equal to'
+      | 'not equal to'
+      | 'rises by'
+      | 'drops by';
     threshold?: number;
     /** custom alert condition SPL (overrides condition/threshold when set) */
     conditionSearch?: string;

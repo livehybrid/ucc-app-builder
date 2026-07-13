@@ -224,12 +224,7 @@ function extractJsonObject(text: string): string | null {
 }
 
 const VALID_AUTH: UccAuthType[] = ['none', 'api_key', 'bearer_token', 'basic', 'oauth2'];
-const VALID_COLLECTION: UccCollection[] = [
-  'rest_api',
-  'modular_input',
-  'file_monitor',
-  'scripted',
-];
+const VALID_COLLECTION: UccCollection[] = ['rest_api', 'modular_input', 'file_monitor', 'scripted'];
 const VALID_FIELD_TYPES: UccFieldType[] = [
   'text',
   'password',
@@ -373,13 +368,16 @@ export function renderBuildInstruction(spec: UccSpec): string {
     `Build a Splunk UCC add-on that EXACTLY matches the following specification, which the user has reviewed and approved. Do not simplify or drop any part of it.`
   );
   lines.push('');
-  lines.push(`Add-on: ${spec.name} (appId ${spec.appId})${spec.vendor ? `, vendor ${spec.vendor}` : ''}.`);
+  lines.push(
+    `Add-on: ${spec.name} (appId ${spec.appId})${spec.vendor ? `, vendor ${spec.vendor}` : ''}.`
+  );
   if (spec.description) lines.push(`Purpose: ${spec.description}`);
   lines.push('');
   lines.push('Configuration page:');
   lines.push(
     `- Account tab: auth type "${spec.account.authType}"${spec.account.multipleAccounts ? ' (allow multiple accounts)' : ''} with fields: ${
-      spec.account.fields.map((f) => `${f.name}${f.encrypted ? ' (encrypted)' : ''}`).join(', ') || '(none)'
+      spec.account.fields.map((f) => `${f.name}${f.encrypted ? ' (encrypted)' : ''}`).join(', ') ||
+      '(none)'
     }.`
   );
   const settings: string[] = [];

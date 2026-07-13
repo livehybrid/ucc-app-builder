@@ -457,7 +457,11 @@ function App() {
           return;
         }
         vfs.fromSnapshot({
-          files: proj.files.map((f) => ({ path: f.path, content: f.content, source: 'user' as const })),
+          files: proj.files.map((f) => ({
+            path: f.path,
+            content: f.content,
+            source: 'user' as const,
+          })),
         });
         setGenerated(true);
         setAppName(proj.name || appId);
@@ -955,11 +959,18 @@ function App() {
               disabled={myAppsBusy || !generated}
               label="💾 Save current app"
             />
-            <Button appearance="default" onClick={refreshApps} disabled={myAppsBusy} label="Refresh" />
+            <Button
+              appearance="default"
+              onClick={refreshApps}
+              disabled={myAppsBusy}
+              label="Refresh"
+            />
           </div>
           {savedApps.length === 0 ? (
             <p style={{ color: '#9b9ea3' }}>
-              {myAppsBusy ? 'Loading…' : 'No saved apps yet - build one and click “Save current app”.'}
+              {myAppsBusy
+                ? 'Loading…'
+                : 'No saved apps yet - build one and click “Save current app”.'}
             </p>
           ) : (
             <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>

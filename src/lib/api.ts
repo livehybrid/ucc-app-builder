@@ -5,7 +5,8 @@
 // Runtime override (set by the native Splunk app page to its locale-correct REST
 // proxy, which forwards to the build engine) takes precedence over the build-time env.
 const API_BASE =
-  (typeof window !== 'undefined' && (window as unknown as { __UCC_API_BASE__?: string }).__UCC_API_BASE__) ||
+  (typeof window !== 'undefined' &&
+    (window as unknown as { __UCC_API_BASE__?: string }).__UCC_API_BASE__) ||
   import.meta.env.VITE_API_URL ||
   'http://localhost:3001/api';
 

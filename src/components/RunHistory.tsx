@@ -68,7 +68,11 @@ function when(ts?: number): string {
   }
 }
 
-const STATUS_COLOR: Record<string, string> = { done: '#53a051', error: '#dc4e41', cancelled: '#f8be34' };
+const STATUS_COLOR: Record<string, string> = {
+  done: '#53a051',
+  error: '#dc4e41',
+  cancelled: '#f8be34',
+};
 
 function preview(s?: string, n = 80): string {
   const t = (s || '').replace(/\s+/g, ' ').trim();
@@ -108,7 +112,9 @@ export function RunHistory({ open, onClose }: Props) {
     setLoading(true);
     setError(null);
     try {
-      const d = await call<{ found?: boolean; trace?: TraceDoc }>('/agent_trace', { job_id: jobId });
+      const d = await call<{ found?: boolean; trace?: TraceDoc }>('/agent_trace', {
+        job_id: jobId,
+      });
       if (d.found === false || !d.trace) {
         setError('That run is no longer available.');
       } else {
@@ -122,7 +128,12 @@ export function RunHistory({ open, onClose }: Props) {
   };
 
   return (
-    <Modal open={open} onRequestClose={onClose} style={{ width: 760, maxWidth: '94%' }} returnFocus={() => {}}>
+    <Modal
+      open={open}
+      onRequestClose={onClose}
+      style={{ width: 760, maxWidth: '94%' }}
+      returnFocus={() => {}}
+    >
       <Modal.Header title={selected ? 'Run trace' : 'Run history'} />
       <Modal.Body>
         {error && (
@@ -133,16 +144,30 @@ export function RunHistory({ open, onClose }: Props) {
 
         {!selected ? (
           <>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 }}>
+            <div
+              style={{
+                display: 'flex',
+                justifyContent: 'space-between',
+                alignItems: 'center',
+                marginBottom: 10,
+              }}
+            >
               <span style={{ color: '#9b9ea3', fontSize: '0.85rem' }}>
                 Past Splunk Agent SDK runs (newest first).
               </span>
-              <Button appearance="default" onClick={() => void refresh()} disabled={loading} label="Refresh" />
+              <Button
+                appearance="default"
+                onClick={() => void refresh()}
+                disabled={loading}
+                label="Refresh"
+              />
             </div>
             {loading ? (
               <WaitSpinner size="medium" />
             ) : rows.length === 0 ? (
-              <p style={{ color: '#9b9ea3' }}>No runs recorded yet - start a chat with the Splunk Agent SDK.</p>
+              <p style={{ color: '#9b9ea3' }}>
+                No runs recorded yet - start a chat with the Splunk Agent SDK.
+              </p>
             ) : (
               <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
                 {rows.map((r) => (
@@ -161,7 +186,12 @@ export function RunHistory({ open, onClose }: Props) {
                   >
                     <div style={{ display: 'flex', justifyContent: 'space-between', gap: 8 }}>
                       <span style={{ fontWeight: 600 }}>{preview(r.prompt)}</span>
-                      <span style={{ color: STATUS_COLOR[r.status || ''] || '#9b9ea3', fontSize: '0.8rem' }}>
+                      <span
+                        style={{
+                          color: STATUS_COLOR[r.status || ''] || '#9b9ea3',
+                          fontSize: '0.8rem',
+                        }}
+                      >
                         {r.status || '-'}
                       </span>
                     </div>
@@ -178,9 +208,12 @@ export function RunHistory({ open, onClose }: Props) {
           <>
             <Button appearance="default" onClick={() => setSelected(null)} label="← Back to list" />
             <div style={{ margin: '10px 0', fontSize: '0.8rem', color: '#9b9ea3' }}>
-              <span style={{ color: STATUS_COLOR[selected.status || ''] || '#9b9ea3' }}>{selected.status}</span>
+              <span style={{ color: STATUS_COLOR[selected.status || ''] || '#9b9ea3' }}>
+                {selected.status}
+              </span>
               {' · '}
-              {selected.model || '-'} · {selected.step_count ?? 0} steps · {when(selected.created_at)}
+              {selected.model || '-'} · {selected.step_count ?? 0} steps ·{' '}
+              {when(selected.created_at)}
             </div>
             {selected.prompt && (
               <div style={{ marginBottom: 10 }}>
@@ -188,7 +221,15 @@ export function RunHistory({ open, onClose }: Props) {
                 <div style={{ whiteSpace: 'pre-wrap' }}>{selected.prompt}</div>
               </div>
             )}
-            <div style={{ maxHeight: 360, overflow: 'auto', display: 'flex', flexDirection: 'column', gap: 6 }}>
+            <div
+              style={{
+                maxHeight: 360,
+                overflow: 'auto',
+                display: 'flex',
+                flexDirection: 'column',
+                gap: 6,
+              }}
+            >
               {selected.events.map((ev, i) => (
                 <TraceEventRow key={i} ev={ev} />
               ))}
@@ -214,7 +255,12 @@ function asText(v: unknown): string {
 }
 
 function TraceEventRow({ ev }: { ev: TraceEvent }) {
-  const base = { padding: '6px 10px', borderRadius: 6, fontSize: '0.82rem', whiteSpace: 'pre-wrap' as const };
+  const base = {
+    padding: '6px 10px',
+    borderRadius: 6,
+    fontSize: '0.82rem',
+    whiteSpace: 'pre-wrap' as const,
+  };
   if (ev.event === 'assistant') {
     return <div style={{ ...base, background: 'rgba(120,150,255,0.10)' }}>{ev.content}</div>;
   }
@@ -228,16 +274,27 @@ function TraceEventRow({ ev }: { ev: TraceEvent }) {
   }
   if (ev.event === 'tool_result') {
     return (
-      <div style={{ ...base, background: 'rgba(255,255,255,0.03)', color: '#9b9ea3', fontFamily: 'monospace' }}>
+      <div
+        style={{
+          ...base,
+          background: 'rgba(255,255,255,0.03)',
+          color: '#9b9ea3',
+          fontFamily: 'monospace',
+        }}
+      >
         → {asText(ev.result ?? ev.content)}
       </div>
     );
   }
   if (ev.event === 'done') {
-    return <div style={{ ...base, background: 'rgba(83,160,81,0.12)' }}>✓ {ev.answer || 'done'}</div>;
+    return (
+      <div style={{ ...base, background: 'rgba(83,160,81,0.12)' }}>✓ {ev.answer || 'done'}</div>
+    );
   }
   if (ev.event === 'error') {
-    return <div style={{ ...base, background: 'rgba(220,78,65,0.12)' }}>⚠ {ev.error || 'error'}</div>;
+    return (
+      <div style={{ ...base, background: 'rgba(220,78,65,0.12)' }}>⚠ {ev.error || 'error'}</div>
+    );
   }
   return <div style={base}>{asText(ev)}</div>;
 }

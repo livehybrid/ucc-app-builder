@@ -47,9 +47,7 @@ export async function listInstalledApps(): Promise<InstalledApp[]> {
  */
 export async function importInstalledApp(appId: string): Promise<ImportAnalysis> {
   const d = await call('/import_installed_app', { appId });
-  const files = Array.isArray(d.files)
-    ? (d.files as Array<{ path: string; content: string }>)
-    : [];
+  const files = Array.isArray(d.files) ? (d.files as Array<{ path: string; content: string }>) : [];
   if (files.length === 0) throw new Error('That app exposed no importable source files.');
   return analyzeImportedFiles(files);
 }

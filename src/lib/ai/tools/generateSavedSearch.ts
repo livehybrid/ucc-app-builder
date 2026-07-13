@@ -1,7 +1,6 @@
 import { Tool } from '../toolTypes';
 
-const API_BASE =
-  (window as unknown as { __UCC_API_BASE__?: string }).__UCC_API_BASE__ || '/api';
+const API_BASE = (window as unknown as { __UCC_API_BASE__?: string }).__UCC_API_BASE__ || '/api';
 
 function appIdOf(vfs: { getAllFiles(): Array<{ path: string; content: string }> }): string {
   const files = vfs.getAllFiles();
@@ -49,8 +48,14 @@ export const generateSavedSearch: Tool = {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(args),
       });
-      const d = (await res.json()) as { ok?: boolean; stanza?: string; path?: string; error?: string };
-      if (!d.ok || !d.stanza || !d.path) return `Error: ${d.error || 'saved search generation failed'}`;
+      const d = (await res.json()) as {
+        ok?: boolean;
+        stanza?: string;
+        path?: string;
+        error?: string;
+      };
+      if (!d.ok || !d.stanza || !d.path)
+        return `Error: ${d.error || 'saved search generation failed'}`;
       const full = `${appIdOf(vfs)}/${d.path}`;
       const existing = vfs.readFile(full) || '';
       const content = existing.trim() ? `${existing.trimEnd()}\n\n${d.stanza}` : d.stanza;
