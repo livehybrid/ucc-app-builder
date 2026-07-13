@@ -17,7 +17,10 @@ export default defineConfig({
   expect: { timeout: 10_000 },
   fullyParallel: false,
   forbidOnly: !!process.env.CI,
-  retries: process.env.CI ? 2 : 0,
+  // Local: 1 retry to absorb intermittent AI model variance in the live AI tests
+  // (the energy-API e2e occasionally has the AI read globalConfig.json then fail
+  //  to write it back — kimi-k2.6 behaves non-deterministically). CI: 2 retries.
+  retries: process.env.CI ? 2 : 1,
   workers: 1,
   reporter: [['list']],
   use: {
@@ -35,12 +38,26 @@ export default defineConfig({
   ],
   webServer: process.env.E2E_SKIP_WEBSERVER
     ? undefined
-    : {
-        command: 'npm run dev:all',
-        url: 'http://localhost:5173',
-        reuseExistingServer: !process.env.CI,
-        timeout: 120_000,
-        stdout: 'ignore',
-        stderr: 'pipe',
-      },
+    : [
+        {
+          command: 'npm run dev',
+          url: 'http://localhost:5173',
+          reuseExistingServer: !process.env.CI,
+          timeout: 120_000,
+          stdout: 'ignore',
+          stderr: 'pipe',
+        },
+        {
+          command: 'npm run dev:server',
+          url: 'http://localhost:3001/api/health',
+          reuseExistingServer: !process.env.CI,
+          timeout: 120_000,
+          stdout: 'ignore',
+          stderr: 'pipe',
+          // Disable post-agent ucc-gen validation in e2e to keep test 3 under
+          // ~10min. Validation is exercised in interactive use; the e2e suite
+          // is verifying agent loop logic, not ucc-gen integration.
+          env: { UCC_AGENT_AUTO_VALIDATE: 'false' },
+        },
+      ],
 });

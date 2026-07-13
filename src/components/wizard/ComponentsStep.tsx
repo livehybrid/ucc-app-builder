@@ -177,7 +177,11 @@ export function ComponentsStep({ config, onChange }: ComponentsStepProps) {
   };
   const updateInput = (index: number, field: keyof ModularInputConfig, value: ModularInputConfig[keyof ModularInputConfig]) => {
     const newInputs = [...config.inputs];
-    newInputs[index] = { ...newInputs[index], [field]: value };
+    // Internal ID fields must match Splunk's ^[a-zA-Z0-9_]+$ rule
+    const sanitized = field === 'name' && typeof value === 'string'
+      ? value.replace(/[^a-zA-Z0-9_]/g, '')
+      : value;
+    newInputs[index] = { ...newInputs[index], [field]: sanitized };
     onChange({ ...config, inputs: newInputs });
   };
   const removeInput = (index: number) => {
@@ -194,7 +198,10 @@ export function ComponentsStep({ config, onChange }: ComponentsStepProps) {
   };
   const updateCommand = (index: number, field: keyof CustomCommandConfig, value: CustomCommandConfig[keyof CustomCommandConfig]) => {
     const newCommands = [...config.commands];
-    newCommands[index] = { ...newCommands[index], [field]: value };
+    const sanitized = field === 'name' && typeof value === 'string'
+      ? value.replace(/[^a-zA-Z0-9_]/g, '')
+      : value;
+    newCommands[index] = { ...newCommands[index], [field]: sanitized };
     onChange({ ...config, commands: newCommands });
   };
   const removeCommand = (index: number) => {
@@ -211,7 +218,10 @@ export function ComponentsStep({ config, onChange }: ComponentsStepProps) {
   };
   const updateAlertAction = (index: number, field: keyof AlertActionConfig, value: AlertActionConfig[keyof AlertActionConfig]) => {
     const newAlerts = [...config.alertActions];
-    newAlerts[index] = { ...newAlerts[index], [field]: value };
+    const sanitized = field === 'name' && typeof value === 'string'
+      ? value.replace(/[^a-zA-Z0-9_]/g, '')
+      : value;
+    newAlerts[index] = { ...newAlerts[index], [field]: sanitized };
     onChange({ ...config, alertActions: newAlerts });
   };
   const removeAlertAction = (index: number) => {
@@ -296,7 +306,7 @@ export function ComponentsStep({ config, onChange }: ComponentsStepProps) {
                   }
                 >
                   <div style={{ padding: '16px 0' }}>
-                    <ControlGroup label="Input Name (Internal ID)" labelPosition="top">
+                    <ControlGroup label="Input Name (Internal ID)" labelPosition="top" help="Letters, numbers, and underscores only — spaces and special characters are not permitted by Splunk.">
                       <Text value={input.name} onChange={(_e: unknown, { value }: { value: string }) => updateInput(index, 'name', value)} placeholder="e.g. my_input" />
                     </ControlGroup>
                     <ControlGroup label="Display Title" labelPosition="top">
@@ -356,7 +366,7 @@ export function ComponentsStep({ config, onChange }: ComponentsStepProps) {
                     <ColumnLayout>
                       <ColumnLayout.Row>
                         <ColumnLayout.Column span={6}>
-                          <ControlGroup label="Command Name" labelPosition="top">
+                          <ControlGroup label="Command Name" labelPosition="top" help="Letters, numbers, and underscores only.">
                             <Text value={cmd.name} onChange={(_e: unknown, { value }: { value: string }) => updateCommand(index, 'name', value)} placeholder="e.g. mycommand" />
                           </ControlGroup>
                         </ColumnLayout.Column>
@@ -414,7 +424,7 @@ export function ComponentsStep({ config, onChange }: ComponentsStepProps) {
                   }
                 >
                   <div style={{ padding: '16px 0' }}>
-                    <ControlGroup label="Alert Action Name" labelPosition="top">
+                    <ControlGroup label="Alert Action Name" labelPosition="top" help="Letters, numbers, and underscores only.">
                       <Text value={alert.name} onChange={(_e: unknown, { value }: { value: string }) => updateAlertAction(index, 'name', value)} placeholder="e.g. send_to_service" />
                     </ControlGroup>
                     <ControlGroup label="Display Label" labelPosition="top">

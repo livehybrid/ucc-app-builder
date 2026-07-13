@@ -45,8 +45,16 @@ export function generateSplunkApp(vfs: VirtualFileSystem, options: GeneratorOpti
   // Clear existing files
   vfs.clear();
 
-  // 1. Generate globalConfig.json
-  const globalConfig = createGlobalConfig(appId, metadata.displayName || metadata.name, metadata.version, components);
+  // 1. Generate globalConfig.json. Pass navColor here so UCC themes the nav
+  // bar via meta.navColor rather than relying on a hand-rolled `color=` attr
+  // in nav.xml (which UCC ignores/strips).
+  const globalConfig = createGlobalConfig(
+    appId,
+    metadata.displayName || metadata.name,
+    metadata.version,
+    components,
+    { navColor: branding.navBarColor },
+  );
   vfs.writeFile(`${appId}/globalConfig.json`, JSON.stringify(globalConfig, null, 2), 'generated');
 
   // 2. Generate app.manifest
@@ -75,9 +83,11 @@ scopes = ${oauthAccount.oauth.scope || ''}
       }
   }
 
-  // 4. Generate navigation XML
-  const navXml = generateNavXml(branding.navBarColor);
-  vfs.writeFile(`${appId}/package/default/data/ui/nav/default.xml`, navXml, 'generated');
+  // 4. [nav omitted] UCC generates default/data/ui/nav/default.xml at build time
+  // from globalConfig.json pages + meta.navColor. Shipping our own file here
+  // would shadow UCC's output and lose app-specific tabs and nav theming.
+  // TODO: add a NavEditor UI so users can customise tabs (inputs, configuration,
+  // dashboards) and write a nav.xml only when they explicitly override the default.
 
   // 5. Generate commands.conf (Custom Commands)
   if (components.commands.length > 0) {
@@ -152,14 +162,12 @@ scopes = ${oauthAccount.oauth.scope || ''}
     vfs.writeFile(`${appId}/package/static/appIconAlt.png`, dataUrlToBase64(appIconAlt), 'generated');
     vfs.writeFile(`${appId}/package/static/appIconAlt_2x.png`, dataUrlToBase64(appIconAlt2x), 'generated');
   } else {
-    vfs.writeFile(`${appId}/package/static/README`, 'Place icons here.', 'generated');
+    vfs.writeFile(`${appId}/package/static/README.txt`, 'Place icons here.', 'generated');
   }
 
   // 10. Generate metadata files
   const defaultMeta = generateDefaultMeta();
   vfs.writeFile(`${appId}/package/metadata/default.meta`, defaultMeta, 'generated');
-  const localMeta = generateLocalMeta();
-  vfs.writeFile(`${appId}/package/metadata/local.meta`, localMeta, 'generated');
 
   // 11. Generate README
   vfs.writeFile(
@@ -173,13 +181,11 @@ scopes = ${oauthAccount.oauth.scope || ''}
   // 12. Generate requirements.txt template
   vfs.writeFile(
     `${appId}/package/lib/requirements.txt`,
-    `# Add your Python dependencies here, one per line.
+    `splunktaucclib>=6.0.0
+# Add your Python dependencies here, one per line.
 # Example:
 # requests>=2.25.1
 # cryptography
-#
-# These libraries will be installed into package/lib/ during the build process.
-# Note: In this browser-based builder, they are only for documentation.
 `,
     'generated'
   );
@@ -243,16 +249,6 @@ function generateAppManifest(metadata: AppMetadata): object {
     supportedDeployments: ['_standalone', '_distributed', '_search_head_clustering'],
     targetWorkloads: ['_search_heads'],
   };
-}
-
-function generateNavXml(color: string): string {
-  return `<nav search_view="search" color="${color}">
-  <view name="search" default="true" />
-  <view name="dashboards" />
-  <view name="reports" />
-  <view name="alerts" />
-</nav>
-`;
 }
 
 function generateCommandsConf(commands: CustomCommandConfig[]): string {
@@ -404,8 +400,8 @@ class ModInput${className}(base_mi.BaseModInput):
     def get_app_name(self):
         return app_name
 
-    def stream_events(self, ew):
-        return ${inputName}_helper.collect_events(self, ew)
+    def collect_events(self, ew):
+        return ${inputName}_helper.stream_events(self, ew)
 
     def get_account_fields(self):
         account_fields = []
@@ -443,7 +439,7 @@ function generateInputHelperScript(inputName: string): string {
   return `# encoding = utf-8
 """
 This module is the helper for the ${inputName} modular input.
-Implement your custom data collection logic in the collect_events function.
+Implement your custom data collection logic in the stream_events function.
 """
 
 
@@ -528,13 +524,6 @@ access = read : [ * ], write : [ admin, sc_admin ]
 [passwords]
 access = read : [ admin ], write : [ admin ]
 export = system
-`;
-}
-
-function generateLocalMeta(): string {
-  return `[]
-access = read : [ * ], write : [ admin ]
-export = none
 `;
 }
 

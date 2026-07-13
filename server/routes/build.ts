@@ -9,8 +9,8 @@ const router = Router();
 const uccGenService = new UCCGenService();
 const fileHandler = new FileHandler();
 
-// Store for active builds
-const builds = new Map<string, BuildStatus>();
+// Store for active builds — exported so other routes (e.g. appinspect) can read outputPath
+export const builds = new Map<string, BuildStatus>();
 
 /**
  * POST /api/build
@@ -163,11 +163,19 @@ async function runBuild(
     await fileHandler.writeFiles(workDir, files);
     build.progress = 30;
 
+    // Strip the local tmp path from log lines so the user-facing build output
+    // shows `<appId>/package/lib/...` instead of leaking `/var/folders/27/.../ucc-app-builder/<uuid>/package/lib/...`.
+    // Both the absolute workDir and the tmpBaseDir prefix are scrubbed.
+    const tmpBase = path.dirname(workDir); // e.g. /var/folders/.../ucc-app-builder
+    const redactLog = (log: string): string =>
+      log
+        .split(workDir).join(appId)
+        .split(tmpBase).join('<tmp>');
+    const pushLog = (log: string) => build.logs.push(redactLog(log));
+
     // Run ucc-gen init if needed
     build.logs.push('Initializing UCC project...');
-    await uccGenService.init(workDir, appId, (log) => {
-      build.logs.push(log);
-    });
+    await uccGenService.init(workDir, appId, pushLog);
     build.progress = 50;
 
     // Run ucc-gen build
@@ -192,17 +200,13 @@ async function runBuild(
       build.logs.push(`Warning: Could not extract version from globalConfig.json, defaulting to ${version}`);
     }
 
-    const outputDir = await uccGenService.build(workDir, (log) => {
-      build.logs.push(log);
-    }, version);
+    const outputDir = await uccGenService.build(workDir, pushLog, version);
     build.progress = 80;
 
     // Package the output (ucc-gen build writes to output/<appID>, so point package at that)
     build.logs.push('Packaging output...');
     const builtAppPath = path.join(outputDir, appId);
-    const packagePath = await uccGenService.package(workDir, builtAppPath, (log) => {
-      build.logs.push(log);
-    });
+    const packagePath = await uccGenService.package(workDir, builtAppPath, pushLog);
     build.outputPath = packagePath;
     build.progress = 100;
 

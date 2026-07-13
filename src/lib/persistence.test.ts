@@ -24,9 +24,12 @@ beforeEach(() => {
   vi.stubGlobal('localStorage', localStorageMock);
   localStorageMock.clear();
   vi.clearAllMocks();
+  // persistence.ts warns on intentional failure paths — avoid noisy stderr during tests.
+  vi.spyOn(console, 'warn').mockImplementation(() => {});
 });
 
 afterEach(() => {
+  vi.mocked(console.warn).mockRestore();
   vi.unstubAllGlobals();
 });
 

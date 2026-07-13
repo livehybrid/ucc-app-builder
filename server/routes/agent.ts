@@ -41,10 +41,14 @@ router.post('/agent/ucc-gen', async (req: Request, res: Response) => {
 
   const start = Date.now();
   const logs: string[] = [];
-  const log = (line: string) => logs.push(line);
 
   try {
     const workDir = await fileHandler.createTempDirectory(`agent-${sessionId}-${uuidv4()}`);
+    // Strip workDir from log lines so build output doesn't leak local tmp paths
+    // back to the AI / client. See server/routes/build.ts for the same pattern.
+    const tmpBase = path.dirname(workDir);
+    const log = (line: string) =>
+      logs.push(line.split(workDir).join(appId).split(tmpBase).join('<tmp>'));
     await fileHandler.writeFiles(workDir, files);
     await uccGen.init(workDir, appId, log);
     const outputDir = await uccGen.build(workDir, log, version ?? '1.0.0');

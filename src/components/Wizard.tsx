@@ -1,9 +1,10 @@
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useMemo } from 'react';
 import styled from 'styled-components';
 import Button from '@splunk/react-ui/Button';
 import ControlGroup from '@splunk/react-ui/ControlGroup';
 import Text from '@splunk/react-ui/Text';
 import TextArea from '@splunk/react-ui/TextArea';
+import Select from '@splunk/react-ui/Select';
 import Heading from '@splunk/react-ui/Heading';
 import DefinitionList from '@splunk/react-ui/DefinitionList';
 import { variables } from '@splunk/themes';
@@ -117,9 +118,60 @@ const CodePreview = styled.pre`
   max-height: 300px;
 `;
 
+const SPLUNKBASE_LICENSES: Array<{ key: string; name: string; url: string | null; group: string }> = [
+  { key: 'apache2', name: 'Apache License Version 2.0', url: 'https://www.apache.org/licenses/LICENSE-2.0.html', group: 'Open Source' },
+  { key: '1_clause_bsd', name: '1-clause BSD License', url: 'https://opensource.org/licenses/BSD-1-Clause', group: 'Open Source' },
+  { key: '2_clause_bsd', name: '2-clause BSD License', url: 'https://opensource.org/licenses/BSD-2-Clause', group: 'Open Source' },
+  { key: '3_clause_bsd', name: '3-Clause BSD License', url: 'https://opensource.org/licenses/BSD-3-Clause', group: 'Open Source' },
+  { key: 'bouncy_castle', name: 'Bouncy Castle License', url: 'https://www.bouncycastle.org/licence.html', group: 'Open Source' },
+  { key: 'cc0', name: 'CC0 1.0 Universal (CC0 1.0)', url: 'https://creativecommons.org/publicdomain/zero/1.0/deed.en', group: 'Open Source' },
+  { key: 'cc2', name: 'Creative Commons Attribution 2.0', url: 'https://creativecommons.org/licenses/by/2.0/', group: 'Open Source' },
+  { key: 'cc4', name: 'Creative Commons Attribution 4.0 International', url: 'https://creativecommons.org/licenses/by/4.0/legalcode', group: 'Open Source' },
+  { key: 'dom4j', name: 'Dom4j', url: 'https://github.com/dom4j/dom4j/blob/master/LICENSE', group: 'Open Source' },
+  { key: 'icu', name: 'ICU License', url: 'https://spdx.org/licenses/ICU.html', group: 'Open Source' },
+  { key: 'isc', name: 'ISC License', url: 'https://opensource.org/licenses/ISC', group: 'Open Source' },
+  { key: 'json', name: 'JSON License', url: 'http://www.json.org/license.html', group: 'Open Source' },
+  { key: 'mit', name: 'MIT License', url: 'https://opensource.org/licenses/MIT', group: 'Open Source' },
+  { key: 'microsoft', name: 'Microsoft Public License', url: 'https://opensource.org/licenses/MS-PL', group: 'Open Source' },
+  { key: '3rd_party_eula', name: 'Splunk End User License for Third Party Content', url: 'https://cdn.splunkbase.splunk.com/static/misc/eula.html', group: 'Third Party' },
+  { key: '3rd_party_eula_custom', name: 'Third Party Developer EULA', url: null, group: 'Third Party' },
+  { key: 'partner', name: 'Partner License Agreement for App', url: null, group: 'Third Party' },
+  { key: 'customer', name: 'Customer License Agreement for App', url: null, group: 'Third Party' },
+  { key: 'other', name: 'Other (specify)', url: null, group: 'Other' },
+];
+
 export function Wizard({ state, onChange, onGenerate }: WizardProps) {
   const currentStepId = WIZARD_STEPS[state.currentStep].id;
   const [touched, setTouched] = useState<Record<string, boolean>>({});
+
+  const initialLicenseKey = useMemo(() => {
+    const match = SPLUNKBASE_LICENSES.find(
+      l => l.name === state.metadata.licenseName && l.key !== 'other'
+    );
+    return match ? match.key : (state.metadata.licenseName ? 'other' : '');
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+  const [selectedLicenseKey, setSelectedLicenseKey] = useState<string>(initialLicenseKey);
+
+  const handleLicenseSelect = (_e: unknown, { value }: { value: string | number | boolean }) => {
+    const key = String(value);
+    setSelectedLicenseKey(key);
+    const license = SPLUNKBASE_LICENSES.find(l => l.key === key);
+    if (license && key !== 'other') {
+      onChange({
+        ...state,
+        metadata: {
+          ...state.metadata,
+          licenseName: license.name,
+          licenseUri: license.url || '',
+        },
+      });
+    } else if (key === 'other') {
+      onChange({
+        ...state,
+        metadata: { ...state.metadata, licenseName: '', licenseUri: '' },
+      });
+    }
+  };
 
   const markTouched = useCallback((field: string) => {
     setTouched((prev) => ({ ...prev, [field]: true }));
@@ -252,21 +304,55 @@ export function Wizard({ state, onChange, onGenerate }: WizardProps) {
               />
             </ControlGroup>
 
-            <ControlGroup label="License Name" labelPosition="top" help="Required for UCC build (e.g. Apache-2.0, MIT, Proprietary).">
-              <Text
-                value={state.metadata.licenseName}
-                onChange={(_e: unknown, { value }: { value: string }) => updateMetadata('licenseName', value)}
-                placeholder="Apache-2.0"
-              />
+            <ControlGroup label="License" labelPosition="top" help="Select the license for your app. Required for UCC build.">
+              <Select
+                value={selectedLicenseKey}
+                onChange={handleLicenseSelect}
+                filter
+              >
+                <Select.Heading>Open Source</Select.Heading>
+                {SPLUNKBASE_LICENSES.filter(l => l.group === 'Open Source').map(l => (
+                  <Select.Option key={l.key} label={l.name} value={l.key} />
+                ))}
+                <Select.Heading>Third Party</Select.Heading>
+                {SPLUNKBASE_LICENSES.filter(l => l.group === 'Third Party').map(l => (
+                  <Select.Option key={l.key} label={l.name} value={l.key} />
+                ))}
+                <Select.Heading>Other</Select.Heading>
+                <Select.Option key="other" label="Other (specify)" value="other" />
+              </Select>
             </ControlGroup>
 
-            <ControlGroup label="License URI" labelPosition="top" help="Required for UCC build.">
-              <Text
-                value={state.metadata.licenseUri}
-                onChange={(_e: unknown, { value }: { value: string }) => updateMetadata('licenseUri', value)}
-                placeholder="https://www.apache.org/licenses/LICENSE-2.0"
-              />
-            </ControlGroup>
+            {selectedLicenseKey === 'other' && (
+              <>
+                <ControlGroup label="License Name" labelPosition="top" help="Enter the license name.">
+                  <Text
+                    value={state.metadata.licenseName}
+                    onChange={(_e: unknown, { value }: { value: string }) => updateMetadata('licenseName', value)}
+                    placeholder="e.g. Proprietary"
+                  />
+                </ControlGroup>
+                <ControlGroup label="License URI" labelPosition="top" help="Enter the URL to the license text (if applicable).">
+                  <Text
+                    value={state.metadata.licenseUri}
+                    onChange={(_e: unknown, { value }: { value: string }) => updateMetadata('licenseUri', value)}
+                    placeholder="https://example.com/license"
+                  />
+                </ControlGroup>
+              </>
+            )}
+
+            {selectedLicenseKey && selectedLicenseKey !== 'other' && (() => {
+              const lic = SPLUNKBASE_LICENSES.find(l => l.key === selectedLicenseKey);
+              return lic ? (
+                <div style={{ fontSize: '0.85rem', color: '#9b9ea3', marginTop: -8 }}>
+                  {lic.url
+                    ? <><span>URI: </span><a href={lic.url} target="_blank" rel="noreferrer" style={{ color: '#65A637' }}>{lic.url}</a></>
+                    : <span>No URI required for this license type.</span>
+                  }
+                </div>
+              ) : null;
+            })()}
           </div>
         )}
 

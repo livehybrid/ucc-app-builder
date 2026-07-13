@@ -32,6 +32,14 @@ import {
   browserCheck,
 } from './tools/verifyTools';
 import { validateUccConformance } from './tools/validateUccConformance';
+import { suggestActions } from './tools/suggestActions';
+import { searchFiles } from './tools/searchFiles';
+import { moveFile } from './tools/moveFile';
+import { diffFile } from './tools/diffFile';
+import { checkpointVfs, restoreCheckpoint, listCheckpoints } from './tools/checkpointVfs';
+import { validatePythonSyntax } from './tools/validatePythonSyntax';
+import { getAppInspectRules } from './tools/getAppInspectRules';
+import { getExampleConf } from './tools/getExampleConf';
 
 // Context passed to tools
 export interface ToolContext {
@@ -83,22 +91,17 @@ export function validatePath(path: string): string | null {
 /**
  * Additional validation for write operations - must be in allowed directories
  */
-export function validateWritePath(path: string): string | null {
-  const baseError = validatePath(path);
-  if (baseError) return baseError;
-  
-  const normalizedPath = path.replace(/\\/g, '/');
-  const isAllowed = ALLOWED_PATH_PREFIXES.some(prefix => 
-    normalizedPath.startsWith(prefix) || normalizedPath.includes(prefix)
-  );
-  
-  if (!isAllowed) {
-    return `Security Error: Write operations are only allowed within the package/ directory.`;
+export function validateWritePath(pathValue: string): string | null {
+  const err = validatePath(pathValue);
+  if (err) return err;
+  const path = pathValue.replace(/\\/g, '/');
+  const isInPackage = path.startsWith('package/') || path.startsWith('/package/') || path.includes('/package/');
+  const isGlobalConfig = path === 'globalConfig.json' || path.endsWith('/globalConfig.json');
+  if (!isInPackage && !isGlobalConfig) {
+    return 'Security Error: write operations are only allowed within package/ or to globalConfig.json.';
   }
-  
   return null;
 }
-
 // Register all tools
 toolRegistry.register(listFiles);
 toolRegistry.register(readFile);
@@ -124,6 +127,17 @@ toolRegistry.register(runAppInspect);
 toolRegistry.register(installToSplunkDocker);
 toolRegistry.register(browserCheck);
 toolRegistry.register(validateUccConformance);
+toolRegistry.register(suggestActions);
+// Developer productivity tools
+toolRegistry.register(searchFiles);
+toolRegistry.register(moveFile);
+toolRegistry.register(diffFile);
+toolRegistry.register(checkpointVfs);
+toolRegistry.register(restoreCheckpoint);
+toolRegistry.register(listCheckpoints);
+toolRegistry.register(validatePythonSyntax);
+toolRegistry.register(getAppInspectRules);
+toolRegistry.register(getExampleConf);
 
 // Export the registry singleton as the default list (for backward compatibility where needed)
 // But mostly consumers should use toolRegistry.getAll()

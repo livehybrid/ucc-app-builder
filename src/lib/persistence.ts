@@ -12,7 +12,7 @@ const VFS_STORAGE_KEY = 'splunk-app-builder-vfs';
 import type { GitHubSession } from '../types/github';
 
 interface PersistedState {
-  mode: 'welcome' | 'wizard' | 'import' | 'files';
+  mode: 'welcome' | 'wizard' | 'import' | 'paste-config' | 'files' | 'getting-started';
   wizardState: WizardState;
   appName: string;
   generated: boolean;

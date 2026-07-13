@@ -31,7 +31,12 @@ describe('Path Validation', () => {
             expect(validateWritePath('/package/default/app.conf')).toBeNull();
         });
 
-        it('should block writing outside package/', () => {
+        it('should allow writing to globalConfig.json', () => {
+            expect(validateWritePath('globalConfig.json')).toBeNull();
+            expect(validateWritePath('my_app/globalConfig.json')).toBeNull();
+        });
+
+        it('should block writing outside package/ or globalConfig.json', () => {
             expect(validateWritePath('root_file.txt')).toContain('Security Error');
             expect(validateWritePath('src/components/Test.tsx')).toContain('Security Error');
         });

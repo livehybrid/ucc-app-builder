@@ -12,7 +12,9 @@ export type EntityType =
   | 'textarea'
   | 'file'
   | 'oauth'
-  | 'helpLink';
+  | 'helpLink'
+  | 'index'
+  | 'interval';
 
 export type ValidatorType =
   | 'string'
@@ -205,6 +207,8 @@ export const ENTITY_TYPES: { type: EntityType; label: string; description: strin
   { type: 'radio', label: 'Radio', description: 'Radio button group' },
   { type: 'textarea', label: 'Text Area', description: 'Multi-line text input' },
   { type: 'file', label: 'File', description: 'File upload' },
+  { type: 'index', label: 'Index', description: 'Splunk index selector dropdown' },
+  { type: 'interval', label: 'Interval', description: 'Polling interval picker' },
 ];
 
 /**
@@ -253,7 +257,7 @@ export function createDefaultInputConfig(): ModularInputConfig {
     entity: [
       { field: 'name', label: 'Name', type: 'text', required: true, help: 'Unique name for this input' },
       { field: 'interval', label: 'Interval', type: 'text', required: true, help: 'Collection interval in seconds' },
-      { field: 'index', label: 'Index', type: 'text', required: true, help: 'Destination index' },
+      { field: 'index', label: 'Index', type: 'index', required: true, help: 'Destination index' },
     ],
   };
 }

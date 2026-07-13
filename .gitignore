@@ -4,6 +4,10 @@ node_modules/
 # Build output
 dist/
 
+# Stale compiled vite config — vite.config.js takes precedence over vite.config.ts.
+# A leftover compiled copy silently shadows all .ts changes (server.proxy, plugins, etc.).
+vite.config.js
+
 # IDE
 .vscode/
 .idea/

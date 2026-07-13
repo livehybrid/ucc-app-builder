@@ -50,11 +50,16 @@ describe('generateSplunkApp', () => {
     expect(config.meta.version).toBe('1.0.0');
   });
 
-  it('should include nav color in navigation XML', () => {
+  it('should set navColor in globalConfig meta and not generate a nav.xml', () => {
+    // UCC generates default/data/ui/nav/default.xml at build time from the
+    // globalConfig pages + meta.navColor. We must not ship our own nav.xml or
+    // it silently shadows UCC's output and the nav loses theming and app tabs.
     generateSplunkApp(vfs, baseOptions);
 
-    const navXml = vfs.readFile('/test_app/package/default/data/ui/nav/default.xml');
-    expect(navXml).toContain('color="#FF5733"');
+    expect(vfs.readFile('/test_app/package/default/data/ui/nav/default.xml')).toBeNull();
+
+    const globalConfig = JSON.parse(vfs.readFile('/test_app/globalConfig.json')!);
+    expect(globalConfig.meta.navColor).toBe('#FF5733');
   });
 
   it('should include app.conf with correct metadata', () => {

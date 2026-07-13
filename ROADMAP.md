@@ -438,6 +438,34 @@ class agent. Full rationale in [`docs/research/00-synthesis.md`](docs/research/0
 - [ ] Langfuse optional sink
 - [ ] Live preview of running Splunk add-on
 
+## Phase 7: Developer Experience Improvements
+
+### 7.1 Validation & Quality
+- [ ] **AppInspect CLI integration** — Run `splunk-appinspect inspect` after build; select deployment target (SplunkBase, Private Cloud Classic/Victoria, Self-hosted); output as JSON (interactive results panel) or JUnitXML (download); "Fix it" button per failure injects failure context into AI chat
+- [ ] **Security scanner in build pipeline** — Pre-build scan of all .py/.conf files for hardcoded credentials, eval/exec on untrusted data, shell=True subprocess; surface as blocking warnings
+- [ ] **Python unit test scaffolding** — AI generates test_<input>.py with mocked helper stubs so developers can test stream_events logic without a live Splunk instance
+
+### 7.2 Import & Migration
+- [ ] **Import existing app (.spl / tar.gz)** — Upload a built Splunk app and reverse-engineer it into VFS + globalConfig.json (GitHub and basic import UI exists but needs full testing)
+- [ ] **Splunk Cloud migration assistant** — Flag everything that won't pass Splunk Cloud vetting: relative imports, subprocess, file system writes outside $SPLUNK_HOME, unsupported conf keys
+
+### 7.3 Developer Tools
+- [ ] **SPL query builder / tester** — Panel for writing SPL queries used in alert actions and custom commands; AI validates syntax, suggests optimisations, explains results
+- [ ] **Event generator for testing** — Generate synthetic JSON/syslog/CEF events matching the input's sourcetype for use with Splunk's event generator or test assertions
+- [ ] **KV Store schema designer** — Visual table editor for collections.conf + transforms.conf lookups with AI-generated conf stanzas and Python CRUD helper
+
+### 7.4 Collaboration & Deployment
+- [ ] **GitHub push / pull** — Export VFS to a GitHub repo branch or clone existing Splunk app repo into VFS (GitHub panel exists, needs full end-to-end testing)
+- [ ] **Splunk ACS one-click deploy** — Integrate Splunk Admin Config Service API for direct Splunk Cloud deployment from a successful build
+- [ ] **Shareable app snapshots** — Generate a time-limited permalink for current VFS state so developers can share work-in-progress without downloading
+
+### 7.5 AI Quality
+- [ ] **Full app review mode** — "Review App" button runs AI across every VFS file and produces prioritised findings: security, AppInspect risks, code quality, missing docs
+- [ ] **Splunk version targeting** — User sets target version (8.x, 9.x, Cloud); AI constrains advice to available APIs/conf keys and flags deprecated patterns
+- [ ] **Explain mode** — "Explain this file" produces plain-English description of what an input does, what data it collects, how it transforms events — for admins inheriting apps
+
+---
+
 ## Changelog
 
 | Date | Change |
@@ -447,3 +475,4 @@ class agent. Full rationale in [`docs/research/00-synthesis.md`](docs/research/0
 | 2024-02-05 | 76 tests passing, 93%+ library coverage |
 | 2024-02-05 | User feedback incorporated - Phase 2 tasks defined |
 | 2026-11-22 | Agent rebuild Phase 1 shipped — new tools, Playwright, Docker install, Kimi default |
+| 2026-05-06 | Phase 7 improvements roadmap added — AppInspect CLI integration, security scanner, SPL builder, and more |

@@ -222,8 +222,15 @@ export function FileBrowser({ vfs, wizardState, developerMode = false, onUpdateC
 
     monaco.languages.register({ id: 'splunk-conf' });
 
+    // Tell Monaco what a "word" looks like in a conf file so it fires
+    // quickSuggestions when typing parameter names (e.g. BREAK_ONLY_BEFORE).
+    monaco.languages.setLanguageConfiguration('splunk-conf', {
+      wordPattern: /[a-zA-Z_][a-zA-Z0-9_.-]*/,
+      comments: { lineComment: '#' },
+    });
+
     monaco.languages.registerCompletionItemProvider('splunk-conf', {
-      triggerCharacters: ['[', '=', ' '],
+      triggerCharacters: ['[', '=', ' ', '\n'],
       provideCompletionItems: (model: { getValueInRange: (range: { startLineNumber: number; startColumn: number; endLineNumber: number; endColumn: number }) => string; getLineContent: (line: number) => string }, position: { lineNumber: number; column: number }) => {
         const textUntilPosition = model.getValueInRange({
           startLineNumber: position.lineNumber, startColumn: 1,
@@ -284,15 +291,25 @@ export function FileBrowser({ vfs, wizardState, developerMode = false, onUpdateC
             return false;
           });
 
-          if (stanzaSpec) {
-            stanzaSpec.params.forEach((p) => {
-              suggestions.push({
-                label: p.name,
-                kind: monaco.languages.CompletionItemKind.Property,
-                insertText: `${p.name} = `,
-                documentation: p.description,
-              });
+          // Compute the word range at the cursor for clean insertion
+          const wordStart = textUntilPosition.search(/[\w.-]+$/) + 1 || position.column;
+          const wordRange = {
+            startLineNumber: position.lineNumber, startColumn: wordStart,
+            endLineNumber: position.lineNumber, endColumn: position.column,
+          };
+
+          const pushParam = (p: { name: string; description: string }, prefix?: string) => {
+            suggestions.push({
+              label: p.name,
+              kind: monaco.languages.CompletionItemKind.Property,
+              insertText: `${p.name} = `,
+              documentation: prefix ? `${prefix} ${p.description || ''}` : p.description,
+              range: wordRange,
             });
+          };
+
+          if (stanzaSpec) {
+            stanzaSpec.params.forEach((p) => pushParam(p));
           }
 
           // Also include params from the [default] stanza if available and we're not already in it
@@ -300,14 +317,8 @@ export function FileBrowser({ vfs, wizardState, developerMode = false, onUpdateC
             const defaultStanza = spec.stanzas.find((s) => s.name === 'default');
             if (defaultStanza) {
               defaultStanza.params.forEach((p) => {
-                // Avoid duplicates
                 if (!suggestions.some((s) => s.label === p.name)) {
-                  suggestions.push({
-                    label: p.name,
-                    kind: monaco.languages.CompletionItemKind.Property,
-                    insertText: `${p.name} = `,
-                    documentation: `(from [default]) ${p.description || ''}`,
-                  });
+                  pushParam(p, '[default]');
                 }
               });
             }
@@ -316,37 +327,32 @@ export function FileBrowser({ vfs, wizardState, developerMode = false, onUpdateC
 
         // 4. Value suggestions: when after `=`
         if (textUntilPosition.includes('=')) {
-          // Find the key name to provide context-specific values
           const keyName = textUntilPosition.split('=')[0].trim();
 
-          // Provide common boolean values
+          // Try to get enum values from the spec
+          if (currentStanzaName) {
+            const stanzaSpec = spec.stanzas.find((s) => {
+              if (s.matchType === 'exact') return s.name === currentStanzaName;
+              if (s.matchType === 'regex' && s.pattern) return s.pattern.test(currentStanzaName!);
+              return false;
+            });
+            const param = stanzaSpec?.params.get(keyName);
+            if (param?.type) {
+              // Extract pipe-separated enum values: e.g. "auto|none|multi|json"
+              const enumValues = param.type.split('|').map((v) => v.trim().replace(/^<|>$/g, '')).filter((v) => v && !v.includes(' ') && v.length < 40);
+              if (enumValues.length > 1) {
+                enumValues.forEach((v) => {
+                  suggestions.push({ label: v, kind: monaco.languages.CompletionItemKind.EnumMember, insertText: v });
+                });
+              }
+            }
+          }
+
+          // Common boolean values always available
           suggestions.push(
             { label: 'true', kind: monaco.languages.CompletionItemKind.Value, insertText: 'true' },
             { label: 'false', kind: monaco.languages.CompletionItemKind.Value, insertText: 'false' },
           );
-
-          // Provide context-specific values for known keys
-          if (keyName === 'disabled' || keyName === 'state') {
-            suggestions.push(
-              { label: 'enabled', kind: monaco.languages.CompletionItemKind.Value, insertText: 'enabled' },
-              { label: 'disabled', kind: monaco.languages.CompletionItemKind.Value, insertText: 'disabled' },
-            );
-          }
-          if (keyName === 'KV_MODE') {
-            ['auto', 'none', 'multi', 'json', 'xml'].forEach((v) => {
-              suggestions.push({ label: v, kind: monaco.languages.CompletionItemKind.Value, insertText: v });
-            });
-          }
-          if (keyName === 'datatype') {
-            ['event', 'metric'].forEach((v) => {
-              suggestions.push({ label: v, kind: monaco.languages.CompletionItemKind.Value, insertText: v });
-            });
-          }
-          if (keyName === 'payload_format') {
-            ['json', 'xml'].forEach((v) => {
-              suggestions.push({ label: v, kind: monaco.languages.CompletionItemKind.Value, insertText: v });
-            });
-          }
         }
 
         return { suggestions };
@@ -755,8 +761,8 @@ export function FileBrowser({ vfs, wizardState, developerMode = false, onUpdateC
 
   return (
     <div onClick={closeContextMenu} style={{ display: 'flex', flexDirection: 'column', flex: 1, minHeight: 0 }}>
-      <Message type="success" style={{ flexShrink: 0, marginBottom: 16 }}>
-        App generated successfully. Edit files below or download as ZIP.
+      <Message type="info" style={{ flexShrink: 0, marginBottom: 16 }}>
+        Source files ready. Use <strong>Build App</strong> above to compile with ucc-gen, or <strong>Export Source</strong> to download the editable source ZIP.
       </Message>
 
       <Toolbar>
@@ -793,6 +799,8 @@ export function FileBrowser({ vfs, wizardState, developerMode = false, onUpdateC
                   scrollBeyondLastLine: false, wordWrap: 'on', automaticLayout: true,
                   tabSize: 2, suggestLineHeight: 50, suggestFontSize: 14,
                   suggest: { showIcons: true, insertMode: 'replace' },
+                  quickSuggestions: { other: true, comments: false, strings: false },
+                  wordBasedSuggestions: 'off',
                   fixedOverflowWidgets: true,
                 }}
               />

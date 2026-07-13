@@ -12,6 +12,20 @@ interface GlobalConfigMeta {
   displayName: string;
   schemaVersion: string;
   supportedThemes?: string[];
+  /**
+   * Optional UCC framework metadata properties. See
+   * https://splunk.github.io/addonfactory-ucc-generator/metadata/#metadata-properties
+   * Setting `navColor` here lets UCC style the nav bar — overriding it via a
+   * `color="..."` attribute on the nav XML defeats UCC and leaves the bar
+   * un-themed. Always prefer this field over hand-rolled nav.xml styling.
+   */
+  navColor?: string;
+  apiVersion?: string;
+  searchViewDefault?: string;
+  isVisible?: boolean;
+  defaultView?: string;
+  // Additional optional meta properties from the UCC schema may be added
+  // through advanced wizard settings (deferred — see TODO.md).
 }
 
 interface GlobalConfigPage {
@@ -214,7 +228,8 @@ export function createGlobalConfig(
   appId: string,
   displayName: string,
   version: string,
-  components: ComponentsConfig
+  components: ComponentsConfig,
+  meta?: { navColor?: string }
 ): GlobalConfig {
   const config: GlobalConfig = {
     meta: {
@@ -224,6 +239,10 @@ export function createGlobalConfig(
       displayName,
       schemaVersion: '0.0.8',
       supportedThemes: ['light', 'dark'],
+      // navColor is the canonical UCC way to theme the nav bar. Plumb it through
+      // so ucc-gen produces a styled nav rather than us baking a `color`
+      // attribute into nav.xml (which UCC would strip/ignore).
+      ...(meta?.navColor ? { navColor: meta.navColor } : {}),
     },
     pages: {},
   };
@@ -341,6 +360,9 @@ export function createGlobalConfig(
       table: {
         header: [
           { label: 'Name', field: 'name' },
+          ...(components.inputs.length > 1
+            ? [{ label: 'Input Type', field: 'serviceTitle' }]
+            : []),
           { label: 'Interval', field: 'interval' },
           { label: 'Index', field: 'index' },
           { label: 'Status', field: 'disabled' },

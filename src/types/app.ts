@@ -46,8 +46,8 @@ export const DEFAULT_WIZARD_STATE: WizardState = {
     email: '',
     version: '1.0.0',
     appId: '',
-    licenseName: 'Apache-2.0',
-    licenseUri: 'https://www.apache.org/licenses/LICENSE-2.0',
+    licenseName: 'Apache License Version 2.0',
+    licenseUri: 'https://www.apache.org/licenses/LICENSE-2.0.html',
   },
   branding: {
     logoFile: null,

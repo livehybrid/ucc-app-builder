@@ -320,6 +320,28 @@ export class VirtualFileSystem {
   clear(): void {
     this.root.children.clear();
   }
+
+  // --- Named checkpoints (VFS snapshots for undo/restore) ---
+  private checkpoints: Map<string, VFSSnapshot> = new Map();
+
+  checkpoint(name: string): void {
+    this.checkpoints.set(name, this.toSnapshot());
+  }
+
+  restoreCheckpoint(name: string): boolean {
+    const snap = this.checkpoints.get(name);
+    if (!snap) return false;
+    this.fromSnapshot(snap);
+    return true;
+  }
+
+  listCheckpoints(): string[] {
+    return Array.from(this.checkpoints.keys());
+  }
+
+  deleteCheckpoint(name: string): boolean {
+    return this.checkpoints.delete(name);
+  }
 }
 
 // Singleton instance for app-wide usage

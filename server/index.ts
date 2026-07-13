@@ -6,6 +6,8 @@ import { buildRouter } from './routes/build.js';
 import { aiRouter } from './routes/ai.js';
 import { agentRouter } from './routes/agent.js';
 import { confSpecRouter } from './routes/confspec.js';
+import { appInspectRouter } from './routes/appinspect.js';
+import { importFingerprintRouter } from './routes/importFingerprint.js';
 
 // Load .env from app root first, then workspace root (if present).
 dotenv.config({ path: path.resolve(process.cwd(), '.env') });
@@ -28,7 +30,8 @@ app.get('/api/health', (_req, res) => {
 });
 
 // GitHub Proxy Routes
-app.post('/api/github/device/code', async (req, res) => {
+// Client calls /github-api/login/device/code which Vite rewrites to /api/github/login/device/code
+app.post('/api/github/login/device/code', async (req, res) => {
   try {
     const response = await fetch('https://github.com/login/device/code', {
       method: 'POST',
@@ -69,6 +72,8 @@ app.use('/api', buildRouter);
 app.use('/api', aiRouter);
 app.use('/api', agentRouter);
 app.use('/api', confSpecRouter);
+app.use('/api', appInspectRouter);
+app.use('/api', importFingerprintRouter);
 
 
 

@@ -11,12 +11,15 @@ import PuzzlePiece from '@splunk/react-icons/PuzzlePiece';
 import Lightning from '@splunk/react-icons/Lightning';
 import FileZip from '@splunk/react-icons/FileZip';
 import Checkmark from '@splunk/react-icons/Checkmark';
+import Pencil from '@splunk/react-icons/Pencil';
 import { Wizard } from './components/Wizard';
 import { FileBrowser } from './components/FileBrowser';
 import { ImportExport } from './components/ImportExport';
+import { PasteConfigPanel } from './components/PasteConfigPanel';
 import { BuildPanel } from './components/BuildPanel';
 import { AIChatPanel } from './components/AIChatPanel';
 import { GitHubPanel } from './components/GitHubPanel';
+import { GettingStartedPage } from './components/GettingStartedPage';
 import type { GitHubSession } from './types/github';
 import Modal from '@splunk/react-ui/Modal';
 import { VirtualFileSystem } from './lib/vfs';
@@ -27,7 +30,7 @@ import { saveState, loadState, clearState, saveVFS, loadVFS, hasSavedState } fro
 import type { WizardState, ImportAnalysis } from './types';
 import { DEFAULT_WIZARD_STATE } from './types';
 
-type AppMode = 'welcome' | 'wizard' | 'import' | 'files';
+type AppMode = 'welcome' | 'wizard' | 'import' | 'paste-config' | 'files' | 'getting-started';
 
 const AppContainer = styled.div`
   height: 100vh;
@@ -349,6 +352,11 @@ function App() {
   const [showGitHubModal, setShowGitHubModal] = useState(false);
   const [gitHubImportMode, setGitHubImportMode] = useState(false); // true = import from repo, false = push to repo
   const [chatOpen, setChatOpen] = useState(false);
+  const [pendingFixItPrompt, setPendingFixItPrompt] = useState<string | null>(null);
+  // Bumped on every "start fresh" so AIChatPanel below can be `key`-mounted
+  // to drop in-memory chat state. localStorage is cleared in handleStartFresh
+  // too — this handles the case where the panel is currently mounted.
+  const [chatResetKey, setChatResetKey] = useState(0);
   // Version counter to force re-renders when VFS changes (e.g., AI writes files)
   const [vfsVersion, setVfsVersion] = useState(0);
   
@@ -392,6 +400,19 @@ function App() {
     setAppName('splunk_app');
     // Don't reset developerMode on start fresh, as it's a user preference
     vfs.clear();
+    // Drop AI Assistant chat history + server-side agent session so the new
+    // project starts with a blank conversation instead of inheriting the
+    // previous app's context. localStorage clears the persisted log;
+    // bumping chatResetKey forces AIChatPanel to remount and drop in-memory
+    // state (messages, planText, todos, decisions, ongoing SSE stream).
+    try {
+      localStorage.removeItem('splunk-app-builder-chat-history');
+      localStorage.removeItem('ucc-agent-session-id');
+    } catch {
+      // ignore — non-critical
+    }
+    setChatOpen(false);
+    setChatResetKey((k) => k + 1);
   }, [vfs]);
 
   // Save state whenever it changes
@@ -409,7 +430,12 @@ function App() {
       const files = vfs.getAllFiles();
       saveVFS(files);
     }
-  }, [mode, wizardState, appName, generated, developerMode, gitHubSession, vfs]);
+    // `vfs` is a stable React ref (created once via useState lazy init) — its
+    // identity never changes, so React would never re-fire this effect when
+    // VFS contents mutate. `vfsVersion` is bumped by AIChatPanel via
+    // onVfsChange() on every AI-driven write/patch. Without it in the deps,
+    // AI-written files were never persisted and a page refresh wiped them.
+  }, [mode, wizardState, appName, generated, developerMode, gitHubSession, vfs, vfsVersion]);
 
   const handleGenerate = useCallback(() => {
     generateSplunkApp(vfs, {
@@ -437,10 +463,60 @@ function App() {
         name: analysis.appId,
         displayName: analysis.displayName || analysis.appId,
         version: analysis.version || prev.metadata.version,
+        ...(analysis.author ? { author: analysis.author } : {}),
+        ...(analysis.email ? { email: analysis.email } : {}),
       },
     }));
     setGenerated(true);
     setMode('files');
+  }, [vfs]);
+
+  const handlePasteConfigLoad = useCallback((configJson: string) => {
+    try {
+      const parsed = JSON.parse(configJson);
+      const meta = parsed?.meta ?? {};
+      const appId: string = meta.name ?? 'imported_app';
+      const displayName: string = meta.displayName ?? appId;
+      const version: string = meta.version ?? '1.0.0';
+
+      // Extract input definitions so generateSplunkApp creates _helper.py files
+      const rawServices = parsed?.pages?.inputs?.services;
+      const inputs: WizardState['components']['inputs'] = Array.isArray(rawServices)
+        ? rawServices.map((svc: { name?: string; title?: string; entity?: unknown[] }) => ({
+            name: svc.name ?? 'input',
+            title: svc.title ?? svc.name ?? 'Input',
+            description: '',
+            entity: [],
+          }))
+        : [];
+
+      const newWizardState: WizardState = {
+        ...DEFAULT_WIZARD_STATE,
+        metadata: {
+          ...DEFAULT_WIZARD_STATE.metadata,
+          appId,
+          name: appId,
+          displayName,
+          version,
+        },
+        components: {
+          ...DEFAULT_WIZARD_STATE.components,
+          inputs,
+        },
+      };
+
+      // Generate the boilerplate file structure first, then overwrite
+      // globalConfig.json with the user's pasted version so nothing is lost.
+      generateSplunkApp(vfs, newWizardState);
+      vfs.writeFile(`${appId}/globalConfig.json`, configJson, 'user');
+
+      setAppName(appId);
+      setWizardState(newWizardState);
+      setGenerated(true);
+      setMode('files');
+    } catch {
+      // Errors are shown in PasteConfigPanel before onLoad is called; this is a safety net only.
+    }
   }, [vfs]);
 
   const handleReset = useCallback(() => {
@@ -468,12 +544,22 @@ function App() {
           />
           <Button
             appearance={mode === 'wizard' ? 'primary' : 'default'}
-            onClick={() => setMode('wizard')}
+            onClick={() => {
+              if (mode === 'wizard') return;
+              if (generated && !confirm('Start a new app and discard current work?')) return;
+              handleStartFresh();
+              setMode('wizard');
+            }}
             label="New App"
           />
           <Button
             appearance={mode === 'import' ? 'primary' : 'default'}
-            onClick={() => setMode('import')}
+            onClick={() => {
+              if (mode === 'import') return;
+              if (generated && !confirm('Import a different app and discard current work?')) return;
+              handleStartFresh();
+              setMode('import');
+            }}
             label="Import"
           />
           <Button
@@ -496,6 +582,11 @@ function App() {
             icon={<Rocket />}
           />
           <Button
+            appearance={mode === 'getting-started' ? 'primary' : 'default'}
+            onClick={() => setMode('getting-started')}
+            label="Guide"
+          />
+          <Button
             appearance={developerMode ? 'primary' : 'default'}
             onClick={() => setDeveloperMode(!developerMode)}
             label={developerMode ? 'Dev Mode: ON' : 'Dev Mode: OFF'}
@@ -506,7 +597,8 @@ function App() {
               <Button
                 appearance="primary"
                 onClick={handleDownload}
-                label="Download ZIP"
+                label="Download App"
+                title="Download complete installable Splunk app (.zip)"
               />
               <Button
                 appearance="default"
@@ -516,7 +608,8 @@ function App() {
                   const blob = await exportSourceZipFromVFS(vfs, appName);
                   downloadBlob(blob, `${appName}-source.zip`);
                 }}
-                label="Download Source"
+                label="Export Source"
+                title="Export source files only for version control / CI-CD"
                 icon={<FileZip />}
               />
               <Button
@@ -540,7 +633,27 @@ function App() {
             </WelcomeIntro>
 
             <ChoiceCardsContainer>
-              <ChoiceCard onClick={() => setMode('wizard')}>
+              {generated && (
+                <ChoiceCard onClick={() => setMode('files')}>
+                  <CardIconWrapper>
+                    <ArrowCircleInRight />
+                  </CardIconWrapper>
+                  <CardTitle>Continue Current Project</CardTitle>
+                  <CardSubtitle>{appName}</CardSubtitle>
+                  <CardDescription>
+                    Resume editing the project you were working on. Pick up where you left off.
+                  </CardDescription>
+                </ChoiceCard>
+              )}
+              <ChoiceCard onClick={() => {
+                if (generated && !confirm('You have an existing project loaded. Start a new app and discard current work?\n\nClick OK to discard, or use "Continue Current Project" above to keep editing.')) return;
+                // Always reset to a clean slate — even when generated is false, stale
+                // wizardState (modular inputs, branding, etc.) can persist from a prior
+                // session and silently pre-fill the wizard. handleStartFresh is safe
+                // to call repeatedly.
+                handleStartFresh();
+                setMode('wizard');
+              }}>
                 <CardIconWrapper>
                   <Rocket />
                 </CardIconWrapper>
@@ -551,7 +664,11 @@ function App() {
                 </CardDescription>
               </ChoiceCard>
 
-              <ChoiceCard onClick={() => setMode('import')}>
+              <ChoiceCard onClick={() => {
+                if (generated && !confirm('You have an existing project loaded. Import a different app and discard current work?')) return;
+                handleStartFresh();
+                setMode('import');
+              }}>
                 <CardIconWrapper>
                   <ArrowCircleInRight />
                 </CardIconWrapper>
@@ -562,7 +679,27 @@ function App() {
                 </CardDescription>
               </ChoiceCard>
 
-              <ChoiceCard onClick={() => { setGitHubImportMode(true); setShowGitHubModal(true); }}>
+              <ChoiceCard onClick={() => {
+                if (generated && !confirm('You have an existing project loaded. Start from a globalConfig.json and discard current work?')) return;
+                handleStartFresh();
+                setMode('paste-config');
+              }}>
+                <CardIconWrapper>
+                  <Pencil />
+                </CardIconWrapper>
+                <CardTitle>Start from globalConfig.json</CardTitle>
+                <CardSubtitle>Paste an existing config</CardSubtitle>
+                <CardDescription>
+                  Paste an existing <code>globalConfig.json</code> to scaffold the app around it — useful when migrating or extending an existing UCC app.
+                </CardDescription>
+              </ChoiceCard>
+
+              <ChoiceCard onClick={() => {
+                if (generated && !confirm('You have an existing project loaded. Import from GitHub and discard current work?')) return;
+                handleStartFresh();
+                setGitHubImportMode(true);
+                setShowGitHubModal(true);
+              }}>
                 <CardIconWrapper>
                   <Rocket />
                 </CardIconWrapper>
@@ -649,6 +786,15 @@ function App() {
           <ImportExport onImportComplete={handleImportComplete} />
         )}
 
+        {mode === 'paste-config' && (
+          <PasteConfigPanel
+            onLoad={handlePasteConfigLoad}
+            onCancel={() => setMode('welcome')}
+          />
+        )}
+
+        {mode === 'getting-started' && <GettingStartedPage />}
+
         {mode === 'files' && generated && (() => {
           const root = vfs.getRoot();
           const firstDir = Array.from(root.children.values()).find((n) => n.type === 'directory');
@@ -663,6 +809,10 @@ function App() {
             <BuildPanel
               files={root}
               appId={appId}
+              onFixItRequest={(prompt) => {
+                setPendingFixItPrompt(prompt);
+                setChatOpen(true);
+              }}
             />
             <FileBrowser
               key={`filebrowser-${vfsVersion}`}
@@ -705,10 +855,16 @@ function App() {
       </Modal>
 
       <AIChatPanel
+        // key forces a full remount on "Start Fresh" so chat messages,
+        // planText, todos, decisions, and any in-flight SSE stream are
+        // dropped along with the rest of the project state.
+        key={chatResetKey}
         open={chatOpen}
         onRequestClose={() => setChatOpen(false)}
         vfs={vfs}
         onBuildTrigger={handleGenerate}
+        externalPrompt={pendingFixItPrompt}
+        onExternalPromptConsumed={() => setPendingFixItPrompt(null)}
         onVfsChange={() => setVfsVersion(v => v + 1)}
         context={{
           globalConfig: vfs.readFile('globalConfig.json') ?? undefined,

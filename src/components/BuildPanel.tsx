@@ -17,11 +17,13 @@ import {
   type UCCVersionInfo,
 } from '../lib/api';
 import type { VFSNode } from '../types/vfs';
+import { AppInspectPanel } from './AppInspectPanel';
 
 interface BuildPanelProps {
   files: VFSNode;
   appId: string;
   onClose?: () => void;
+  onFixItRequest?: (prompt: string) => void;
 }
 
 const PanelContainer = styled.div`
@@ -89,7 +91,7 @@ function flattenVFS(
   return files;
 }
 
-export function BuildPanel({ files, appId, onClose }: BuildPanelProps) {
+export function BuildPanel({ files, appId, onClose, onFixItRequest }: BuildPanelProps) {
   const [backendStatus, setBackendStatus] = useState<'checking' | 'online' | 'offline'>('checking');
   const [uccVersion, setUccVersion] = useState<UCCVersionInfo | null>(null);
   const [buildStatus, setBuildStatus] = useState<BuildStatus | null>(null);
@@ -200,6 +202,13 @@ export function BuildPanel({ files, appId, onClose }: BuildPanelProps) {
               ))}
             </BuildLogs>
           </div>
+        )}
+
+        {buildStatus?.status === 'success' && buildStatus.id && onFixItRequest && (
+          <AppInspectPanel
+            buildId={buildStatus.id}
+            onFixItRequest={onFixItRequest}
+          />
         )}
       </PanelContent>
     </PanelContainer>

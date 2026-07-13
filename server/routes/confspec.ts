@@ -6,7 +6,7 @@ import { confSpecIndex } from '../../src/lib/confSpec.js';
 const router = Router();
 
 const SPEC_DIR = process.env.UCC_SPEC_DIR
-  || path.join(process.cwd(), 'data/splunk-confs');
+  || path.join(process.cwd(), 'vendor/splunk-spec-files');
 
 let bootPromise: Promise<number> | null = null;
 
@@ -68,6 +68,23 @@ router.get('/confspec/stanza', async (req: Request, res: Response) => {
     lines.push('');
   }
   res.type('text/plain').send(lines.join('\n'));
+});
+
+router.get('/confspec/conf', async (req: Request, res: Response) => {
+  const name = String(req.query.name ?? '');
+  if (!name) return res.status(400).json({ error: 'name is required' });
+  // Accept with or without .conf extension
+  const filename = name.endsWith('.conf') ? name : `${name}.conf`;
+  // Block path traversal
+  if (filename.includes('/') || filename.includes('..')) {
+    return res.status(400).json({ error: 'Invalid conf name' });
+  }
+  try {
+    const text = await fs.readFile(path.join(SPEC_DIR, filename), 'utf-8');
+    res.type('text/plain').send(text);
+  } catch {
+    return res.status(404).json({ error: `Example conf not found: ${filename}` });
+  }
 });
 
 router.post('/confspec/reload', async (_req: Request, res: Response) => {
