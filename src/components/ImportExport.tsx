@@ -126,11 +126,9 @@ export function ImportExport({ onImportComplete }: ImportExportProps) {
       {installedAppsAvailable() && (
         <div style={{ marginBottom: 24 }} data-testid="seed-installed">
           <CollapsiblePanel title="Seed from an add-on installed on this Splunk" defaultOpen>
-
             <p style={{ color: '#9b9ea3', marginTop: 0 }}>
-              Load an installed UCC add-on's source into the builder to extend it with the AI -
-              no manual export. (Vendored libraries, bytecode and instance-local config are
-              excluded.)
+              Load an installed UCC add-on's source into the builder to extend it with the AI - no
+              manual export. (Vendored libraries, bytecode and instance-local config are excluded.)
             </p>
             {loadingInstalled ? (
               <WaitSpinner />

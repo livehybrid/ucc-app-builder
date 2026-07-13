@@ -575,9 +575,11 @@ function splunkAgentAvailable(): boolean {
 /** Same-origin fetch to a Splunk REST endpoint under this app (CSRF handled by the
  *  loader). Returns undefined when not running embedded in Splunk. */
 function splunkFetch(path: string, init?: RequestInit): Promise<Response> | undefined {
-  const fn = (window as unknown as {
-    __UCC_SPLUNK_FETCH__?: (p: string, i?: RequestInit) => Promise<Response>;
-  }).__UCC_SPLUNK_FETCH__;
+  const fn = (
+    window as unknown as {
+      __UCC_SPLUNK_FETCH__?: (p: string, i?: RequestInit) => Promise<Response>;
+    }
+  ).__UCC_SPLUNK_FETCH__;
   return fn ? fn(path, init) : undefined;
 }
 
@@ -1192,9 +1194,7 @@ export function AIChatPanel({
    *  for events. Splunk persistent REST handlers can't stream and the embedded SPA sits
    *  behind a buffering proxy, so polling is how progress arrives incrementally - each
    *  poll is its own round-trip, filling the transcript step by step. */
-  const splunkAgentLoop = async (
-    messages: Array<{ role: string; content: string }>
-  ) => {
+  const splunkAgentLoop = async (messages: Array<{ role: string; content: string }>) => {
     // Sync the SPA's current VFS into the agent's server-side KV project BEFORE the run, so
     // the agent works on EXACTLY what the user is looking at. We ALWAYS sync - including when
     // the VFS is empty (a new / "start fresh" app), which clears the KV project. Otherwise a
@@ -1560,8 +1560,7 @@ export function AIChatPanel({
       // model like kimi-k2.6 whose reasoning can starve `content` → "empty response").
       // Expansion is structured extraction: use the CONFIGURED chat model (sonnet, etc.)
       // from the Configuration → AI Provider tab instead.
-      const expansionModel =
-        (splunkMode && aiConfig?.configuredModels?.chat) || activeModel;
+      const expansionModel = (splunkMode && aiConfig?.configuredModels?.chat) || activeModel;
       const spec = await expandRequest({
         request: text,
         model: expansionModel,
@@ -2002,7 +2001,9 @@ export function AIChatPanel({
         // surface as a dead-end red banner with no way forward. Treat it as a resumable
         // stop: offer the same "▶ Continue" affordance the engine path gets so the user
         // can pick up from where the agent left off (it re-reads the KV project state).
-        if (/steps?\s*limit|StepsLimitExceeded|reached max(?:imum)? (?:tool )?iterations/i.test(msg)) {
+        if (
+          /steps?\s*limit|StepsLimitExceeded|reached max(?:imum)? (?:tool )?iterations/i.test(msg)
+        ) {
           setOfferContinue(true);
           setMessages((prev) => [
             ...prev,
@@ -2145,129 +2146,130 @@ export function AIChatPanel({
                 )}
 
                 {!splunkMode && (
-                <>
-                <ControlGroup
-                  label="Model"
-                  labelPosition="top"
-                  help={
-                    remoteModels.length
-                      ? `Live list of ${remoteModels.length} tool-calling models from OpenRouter - or use a custom model ID.`
-                      : 'Select a model or use a custom model ID from OpenRouter.'
-                  }
-                  style={{ marginTop: 16 }}
-                >
-                  <Select
-                    value={selectedModel}
-                    onChange={(_e: unknown, { value }: { value: string | number | boolean }) =>
-                      saveModel(String(value))
-                    }
-                    disabled={useCustomModel}
-                    filter
-                  >
-                    {(remoteModels.length
-                      ? // Keep the saved selection choosable even if it left the live list.
-                        remoteModels.some((m) => m.id === selectedModel)
-                        ? remoteModels
-                        : [
-                            {
-                              id: selectedModel,
-                              label: selectedModel,
-                              provider: selectedModel.split('/')[0] ?? '',
-                              contextLength: 0,
-                            },
-                            ...remoteModels,
-                          ]
-                      : AVAILABLE_MODELS.map((m) => ({
-                          id: m.id,
-                          label: m.label,
-                          provider: m.provider,
-                          contextLength: 0,
-                        }))
-                    ).map((m) => (
-                      <Select.Option
-                        key={m.id}
-                        label={
-                          m.contextLength
-                            ? `${m.label} - ${Math.round(m.contextLength / 1000)}k ctx`
-                            : `${m.label} (${m.provider})`
-                        }
-                        value={m.id}
-                      />
-                    ))}
-                  </Select>
-                </ControlGroup>
-
-                <div style={{ marginTop: 12 }}>
-                  <Switch
-                    selected={useCustomModel}
-                    onClick={() => setUseCustomModel(!useCustomModel)}
-                    appearance="toggle"
-                  >
-                    Use custom model ID
-                  </Switch>
-                </div>
-
-                {useCustomModel && (
-                  <ControlGroup
-                    label="Custom Model ID"
-                    labelPosition="top"
-                    help="Enter any OpenRouter model ID (e.g., mistralai/mixtral-8x22b)"
-                    style={{ marginTop: 8 }}
-                  >
-                    <Text
-                      value={customModelId}
-                      onChange={(_e: unknown, { value }: { value: string }) =>
-                        setCustomModelId(value)
+                  <>
+                    <ControlGroup
+                      label="Model"
+                      labelPosition="top"
+                      help={
+                        remoteModels.length
+                          ? `Live list of ${remoteModels.length} tool-calling models from OpenRouter - or use a custom model ID.`
+                          : 'Select a model or use a custom model ID from OpenRouter.'
                       }
-                      placeholder="provider/model-name"
-                    />
-                  </ControlGroup>
-                )}
+                      style={{ marginTop: 16 }}
+                    >
+                      <Select
+                        value={selectedModel}
+                        onChange={(_e: unknown, { value }: { value: string | number | boolean }) =>
+                          saveModel(String(value))
+                        }
+                        disabled={useCustomModel}
+                        filter
+                      >
+                        {(remoteModels.length
+                          ? // Keep the saved selection choosable even if it left the live list.
+                            remoteModels.some((m) => m.id === selectedModel)
+                            ? remoteModels
+                            : [
+                                {
+                                  id: selectedModel,
+                                  label: selectedModel,
+                                  provider: selectedModel.split('/')[0] ?? '',
+                                  contextLength: 0,
+                                },
+                                ...remoteModels,
+                              ]
+                          : AVAILABLE_MODELS.map((m) => ({
+                              id: m.id,
+                              label: m.label,
+                              provider: m.provider,
+                              contextLength: 0,
+                            }))
+                        ).map((m) => (
+                          <Select.Option
+                            key={m.id}
+                            label={
+                              m.contextLength
+                                ? `${m.label} - ${Math.round(m.contextLength / 1000)}k ctx`
+                                : `${m.label} (${m.provider})`
+                            }
+                            value={m.id}
+                          />
+                        ))}
+                      </Select>
+                    </ControlGroup>
 
-                <Message type="info" style={{ marginTop: 12 }}>
-                  Active: {activeModel}
-                </Message>
-                {aiConfig?.capabilities && (
-                  <Message type="info" style={{ marginTop: 8 }}>
-                    Docker tools:{' '}
-                    {aiConfig.capabilities.dockerToolsEnabled ? 'enabled' : 'disabled'} | Browser
-                    check: {aiConfig.capabilities.browserCheckEnabled ? 'enabled' : 'disabled'}
-                  </Message>
-                )}
-                {aiConfig?.capabilities && (
-                  <Message type="info" style={{ marginTop: 8 }}>
-                    Local docs index:{' '}
-                    {aiConfig.capabilities.localDocsIndexEnabled ? 'enabled' : 'disabled'} |
-                    Live-Splunk MCP grounding:{' '}
-                    {aiConfig.capabilities.mcpGroundingEnabled
-                      ? 'enabled'
-                      : 'disabled (standalone)'}
-                  </Message>
-                )}
-                </>
+                    <div style={{ marginTop: 12 }}>
+                      <Switch
+                        selected={useCustomModel}
+                        onClick={() => setUseCustomModel(!useCustomModel)}
+                        appearance="toggle"
+                      >
+                        Use custom model ID
+                      </Switch>
+                    </div>
+
+                    {useCustomModel && (
+                      <ControlGroup
+                        label="Custom Model ID"
+                        labelPosition="top"
+                        help="Enter any OpenRouter model ID (e.g., mistralai/mixtral-8x22b)"
+                        style={{ marginTop: 8 }}
+                      >
+                        <Text
+                          value={customModelId}
+                          onChange={(_e: unknown, { value }: { value: string }) =>
+                            setCustomModelId(value)
+                          }
+                          placeholder="provider/model-name"
+                        />
+                      </ControlGroup>
+                    )}
+
+                    <Message type="info" style={{ marginTop: 12 }}>
+                      Active: {activeModel}
+                    </Message>
+                    {aiConfig?.capabilities && (
+                      <Message type="info" style={{ marginTop: 8 }}>
+                        Docker tools:{' '}
+                        {aiConfig.capabilities.dockerToolsEnabled ? 'enabled' : 'disabled'} |
+                        Browser check:{' '}
+                        {aiConfig.capabilities.browserCheckEnabled ? 'enabled' : 'disabled'}
+                      </Message>
+                    )}
+                    {aiConfig?.capabilities && (
+                      <Message type="info" style={{ marginTop: 8 }}>
+                        Local docs index:{' '}
+                        {aiConfig.capabilities.localDocsIndexEnabled ? 'enabled' : 'disabled'} |
+                        Live-Splunk MCP grounding:{' '}
+                        {aiConfig.capabilities.mcpGroundingEnabled
+                          ? 'enabled'
+                          : 'disabled (standalone)'}
+                      </Message>
+                    )}
+                  </>
                 )}
 
                 {!splunkMode && (
-                <div
-                  style={{
-                    marginTop: 16,
-                    paddingTop: 16,
-                    borderTop: '1px solid rgba(255,255,255,0.1)',
-                  }}
-                >
-                  <Switch
-                    selected={autoAccept}
-                    onClick={() => saveAutoAccept(!autoAccept)}
-                    appearance="toggle"
+                  <div
+                    style={{
+                      marginTop: 16,
+                      paddingTop: 16,
+                      borderTop: '1px solid rgba(255,255,255,0.1)',
+                    }}
                   >
-                    Auto-accept tool actions
-                  </Switch>
-                  <p style={{ fontSize: '0.85em', color: '#9b9ea3', marginTop: 4 }}>
-                    {autoAccept
-                      ? 'Tools will execute without confirmation.'
-                      : 'You will be prompted to approve file changes.'}
-                  </p>
-                </div>
+                    <Switch
+                      selected={autoAccept}
+                      onClick={() => saveAutoAccept(!autoAccept)}
+                      appearance="toggle"
+                    >
+                      Auto-accept tool actions
+                    </Switch>
+                    <p style={{ fontSize: '0.85em', color: '#9b9ea3', marginTop: 4 }}>
+                      {autoAccept
+                        ? 'Tools will execute without confirmation.'
+                        : 'You will be prompted to approve file changes.'}
+                    </p>
+                  </div>
                 )}
 
                 <ControlGroup
@@ -2295,57 +2297,59 @@ export function AIChatPanel({
                 </p>
 
                 {!splunkMode && (
-                <div
-                  data-testid="tool-policy-settings"
-                  style={{
-                    marginTop: 16,
-                    paddingTop: 16,
-                    borderTop: '1px solid rgba(255,255,255,0.1)',
-                  }}
-                >
-                  <Heading level={5} style={{ margin: '0 0 6px 0' }}>
-                    Tool approval policy
-                  </Heading>
-                  <p style={{ fontSize: '0.85em', color: '#9b9ea3', margin: '0 0 10px 0' }}>
-                    External-access tools require approval on first use (remembered for the
-                    session). Toggle a tool to "Always ask" or "Auto (no prompt)". Saved locally and
-                    applied per request.
-                  </p>
-                  {(() => {
-                    // The external/ask tools, merged from the server (live-Splunk MCP +
-                    // any deploy/external-fetch tools) and the browser-only client tools.
-                    const serverAsk = aiConfig?.toolPolicy?.askTools ?? [];
-                    const askTools = Array.from(
-                      new Set([...serverAsk, ...CLIENT_ASK_TOOLS])
-                    ).sort();
-                    return askTools.map((tool) => {
-                      const effective = resolveClientPolicy(tool);
-                      const alwaysAsk = effective !== 'auto';
-                      return (
-                        <div
-                          key={tool}
-                          data-testid={`tool-policy-row-${tool}`}
-                          style={{
-                            display: 'flex',
-                            alignItems: 'center',
-                            justifyContent: 'space-between',
-                            padding: '4px 0',
-                          }}
-                        >
-                          <code style={{ fontSize: '0.8em' }}>{tool}</code>
-                          <Switch
-                            selected={alwaysAsk}
-                            onClick={() => saveToolPolicyOverride(tool, alwaysAsk ? 'auto' : 'ask')}
-                            appearance="toggle"
-                            data-testid={`tool-policy-toggle-${tool}`}
+                  <div
+                    data-testid="tool-policy-settings"
+                    style={{
+                      marginTop: 16,
+                      paddingTop: 16,
+                      borderTop: '1px solid rgba(255,255,255,0.1)',
+                    }}
+                  >
+                    <Heading level={5} style={{ margin: '0 0 6px 0' }}>
+                      Tool approval policy
+                    </Heading>
+                    <p style={{ fontSize: '0.85em', color: '#9b9ea3', margin: '0 0 10px 0' }}>
+                      External-access tools require approval on first use (remembered for the
+                      session). Toggle a tool to "Always ask" or "Auto (no prompt)". Saved locally
+                      and applied per request.
+                    </p>
+                    {(() => {
+                      // The external/ask tools, merged from the server (live-Splunk MCP +
+                      // any deploy/external-fetch tools) and the browser-only client tools.
+                      const serverAsk = aiConfig?.toolPolicy?.askTools ?? [];
+                      const askTools = Array.from(
+                        new Set([...serverAsk, ...CLIENT_ASK_TOOLS])
+                      ).sort();
+                      return askTools.map((tool) => {
+                        const effective = resolveClientPolicy(tool);
+                        const alwaysAsk = effective !== 'auto';
+                        return (
+                          <div
+                            key={tool}
+                            data-testid={`tool-policy-row-${tool}`}
+                            style={{
+                              display: 'flex',
+                              alignItems: 'center',
+                              justifyContent: 'space-between',
+                              padding: '4px 0',
+                            }}
                           >
-                            {alwaysAsk ? 'Always ask' : 'Auto'}
-                          </Switch>
-                        </div>
-                      );
-                    });
-                  })()}
-                </div>
+                            <code style={{ fontSize: '0.8em' }}>{tool}</code>
+                            <Switch
+                              selected={alwaysAsk}
+                              onClick={() =>
+                                saveToolPolicyOverride(tool, alwaysAsk ? 'auto' : 'ask')
+                              }
+                              appearance="toggle"
+                              data-testid={`tool-policy-toggle-${tool}`}
+                            >
+                              {alwaysAsk ? 'Always ask' : 'Auto'}
+                            </Switch>
+                          </div>
+                        );
+                      });
+                    })()}
+                  </div>
                 )}
               </SettingsSection>
               <PanelFooter>

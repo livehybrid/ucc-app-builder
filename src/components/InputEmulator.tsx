@@ -14,8 +14,7 @@ import WaitSpinner from '@splunk/react-ui/WaitSpinner';
 import type { VirtualFileSystem } from '../lib/vfs';
 import { generateInputHelperScript } from '../lib/generator';
 
-const API_BASE =
-  (window as unknown as { __UCC_API_BASE__?: string }).__UCC_API_BASE__ || '/api';
+const API_BASE = (window as unknown as { __UCC_API_BASE__?: string }).__UCC_API_BASE__ || '/api';
 
 interface EmulatedEvent {
   data: string;
@@ -78,8 +77,7 @@ function discoverInputs(vfs: VirtualFileSystem): DiscoveredInput[] {
         //    module-level stream_events) rather than the _helper.py boilerplate - recognise
         //    it as real collection code instead of falsely reporting "barebones".
         const script = files.find(
-          (f) =>
-            f.path.endsWith(`/package/bin/${name}.py`) && COLLECTION_FN.test(f.content || '')
+          (f) => f.path.endsWith(`/package/bin/${name}.py`) && COLLECTION_FN.test(f.content || '')
         );
         if (script) byName.set(name, { name, path: script.path, hasHelper: true });
         else byName.set(name, { name, path: null, hasHelper: false });
@@ -136,7 +134,13 @@ export function InputEmulator({ open, onClose, vfs }: Props) {
   const [selected, setSelected] = useState('');
   const [argRows, setArgRows] = useState<Array<{ name: string; value: string }>>([]);
   const [index, setIndex] = useState('main');
-  const [proxy, setProxy] = useState({ enabled: false, host: '', port: '8080', username: '', password: '' });
+  const [proxy, setProxy] = useState({
+    enabled: false,
+    host: '',
+    port: '8080',
+    username: '',
+    password: '',
+  });
   const [running, setRunning] = useState(false);
   const [result, setResult] = useState<EmulateResult | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -197,13 +201,17 @@ export function InputEmulator({ open, onClose, vfs }: Props) {
   };
 
   return (
-    <Modal open={open} onRequestClose={onClose} style={{ width: 780, maxWidth: '94%' }} returnFocus={() => {}}>
+    <Modal
+      open={open}
+      onRequestClose={onClose}
+      style={{ width: 780, maxWidth: '94%' }}
+      returnFocus={() => {}}
+    >
       <Modal.Header title="Test Input - emulate stream_events" />
       <Modal.Body>
         <Message type="info" style={{ marginBottom: 12 }}>
-          Runs the input's collection code with the values you provide (real HTTP, no install)
-          and shows the events it would index - so you can see the data before writing
-          props/transforms.
+          Runs the input's collection code with the values you provide (real HTTP, no install) and
+          shows the events it would index - so you can see the data before writing props/transforms.
         </Message>
 
         {inputs.length === 0 ? (
@@ -214,7 +222,15 @@ export function InputEmulator({ open, onClose, vfs }: Props) {
         ) : (
           <>
             <div style={{ display: 'flex', gap: 8, alignItems: 'flex-end', marginBottom: 10 }}>
-              <label style={{ fontSize: '0.8rem', color: '#9b9ea3', display: 'flex', flexDirection: 'column', gap: 3 }}>
+              <label
+                style={{
+                  fontSize: '0.8rem',
+                  color: '#9b9ea3',
+                  display: 'flex',
+                  flexDirection: 'column',
+                  gap: 3,
+                }}
+              >
                 Input
                 <Select value={selected} onChange={(_e, { value }) => pickInput(String(value))}>
                   {inputs.map((i) => (
@@ -222,7 +238,15 @@ export function InputEmulator({ open, onClose, vfs }: Props) {
                   ))}
                 </Select>
               </label>
-              <label style={{ fontSize: '0.8rem', color: '#9b9ea3', display: 'flex', flexDirection: 'column', gap: 3 }}>
+              <label
+                style={{
+                  fontSize: '0.8rem',
+                  color: '#9b9ea3',
+                  display: 'flex',
+                  flexDirection: 'column',
+                  gap: 3,
+                }}
+              >
                 Index
                 <Text value={index} onChange={(_e, { value }) => setIndex(value)} />
               </label>
@@ -262,27 +286,62 @@ export function InputEmulator({ open, onClose, vfs }: Props) {
                       placeholder="value"
                       style={{ flex: 2 }}
                     />
-                    <Button appearance="destructive" onClick={() => setArgRows((p) => p.filter((_, idx) => idx !== i))} label="✕" />
+                    <Button
+                      appearance="destructive"
+                      onClick={() => setArgRows((p) => p.filter((_, idx) => idx !== i))}
+                      label="✕"
+                    />
                   </div>
                 ))}
-                <Button appearance="default" onClick={() => setArgRows((p) => [...p, { name: '', value: '' }])} label="+ field" />
+                <Button
+                  appearance="default"
+                  onClick={() => setArgRows((p) => [...p, { name: '', value: '' }])}
+                  label="+ field"
+                />
 
                 <div style={{ marginTop: 10 }}>
-                  <Switch selected={proxy.enabled} onClick={() => setProxy((p) => ({ ...p, enabled: !p.enabled }))} appearance="checkbox">
+                  <Switch
+                    selected={proxy.enabled}
+                    onClick={() => setProxy((p) => ({ ...p, enabled: !p.enabled }))}
+                    appearance="checkbox"
+                  >
                     Use proxy
                   </Switch>
                   {proxy.enabled && (
                     <div style={{ display: 'flex', gap: 6, marginTop: 6 }}>
-                      <Text value={proxy.host} onChange={(_e, { value }) => setProxy((p) => ({ ...p, host: value }))} placeholder="host" />
-                      <Text value={proxy.port} onChange={(_e, { value }) => setProxy((p) => ({ ...p, port: value }))} placeholder="port" />
-                      <Text value={proxy.username} onChange={(_e, { value }) => setProxy((p) => ({ ...p, username: value }))} placeholder="user" />
-                      <Text value={proxy.password} onChange={(_e, { value }) => setProxy((p) => ({ ...p, password: value }))} placeholder="pass" type="password" />
+                      <Text
+                        value={proxy.host}
+                        onChange={(_e, { value }) => setProxy((p) => ({ ...p, host: value }))}
+                        placeholder="host"
+                      />
+                      <Text
+                        value={proxy.port}
+                        onChange={(_e, { value }) => setProxy((p) => ({ ...p, port: value }))}
+                        placeholder="port"
+                      />
+                      <Text
+                        value={proxy.username}
+                        onChange={(_e, { value }) => setProxy((p) => ({ ...p, username: value }))}
+                        placeholder="user"
+                      />
+                      <Text
+                        value={proxy.password}
+                        onChange={(_e, { value }) => setProxy((p) => ({ ...p, password: value }))}
+                        placeholder="pass"
+                        type="password"
+                      />
                     </div>
                   )}
                 </div>
 
                 <div style={{ marginTop: 12 }}>
-                  <Button appearance="primary" onClick={run} disabled={running} icon={running ? <WaitSpinner /> : undefined} label={running ? 'Running…' : '▶ Run emulation'} />
+                  <Button
+                    appearance="primary"
+                    onClick={run}
+                    disabled={running}
+                    icon={running ? <WaitSpinner /> : undefined}
+                    label={running ? 'Running…' : '▶ Run emulation'}
+                  />
                 </div>
               </>
             )}
@@ -290,7 +349,9 @@ export function InputEmulator({ open, onClose, vfs }: Props) {
             {error && (
               <Message type="error" style={{ marginTop: 12 }}>
                 {error}
-                {result?.trace ? <pre style={{ whiteSpace: 'pre-wrap', fontSize: '0.75rem' }}>{result.trace}</pre> : null}
+                {result?.trace ? (
+                  <pre style={{ whiteSpace: 'pre-wrap', fontSize: '0.75rem' }}>{result.trace}</pre>
+                ) : null}
               </Message>
             )}
 
@@ -300,13 +361,32 @@ export function InputEmulator({ open, onClose, vfs }: Props) {
                   {result.count} event{result.count === 1 ? '' : 's'} captured
                   {result.truncated ? ' (truncated)' : ''}.
                 </Message>
-                <pre style={{ maxHeight: 240, overflow: 'auto', background: '#1e1e1e', color: '#e8e8e8', padding: 10, borderRadius: 6, fontSize: '0.78rem' }}>
-                  {(result.events || []).map((e, i) => `# event ${i + 1} (sourcetype=${e.sourcetype || ''}, index=${e.index || ''})\n${e.data}`).join('\n\n')}
+                <pre
+                  style={{
+                    maxHeight: 240,
+                    overflow: 'auto',
+                    background: '#1e1e1e',
+                    color: '#e8e8e8',
+                    padding: 10,
+                    borderRadius: 6,
+                    fontSize: '0.78rem',
+                  }}
+                >
+                  {(result.events || [])
+                    .map(
+                      (e, i) =>
+                        `# event ${i + 1} (sourcetype=${e.sourcetype || ''}, index=${e.index || ''})\n${e.data}`
+                    )
+                    .join('\n\n')}
                 </pre>
                 {result.logs && result.logs.length > 0 && (
                   <details style={{ marginTop: 8 }}>
-                    <summary style={{ cursor: 'pointer', color: '#9b9ea3' }}>Logs ({result.logs.length})</summary>
-                    <pre style={{ fontSize: '0.75rem', color: '#9b9ea3' }}>{result.logs.join('\n')}</pre>
+                    <summary style={{ cursor: 'pointer', color: '#9b9ea3' }}>
+                      Logs ({result.logs.length})
+                    </summary>
+                    <pre style={{ fontSize: '0.75rem', color: '#9b9ea3' }}>
+                      {result.logs.join('\n')}
+                    </pre>
                   </details>
                 )}
               </div>

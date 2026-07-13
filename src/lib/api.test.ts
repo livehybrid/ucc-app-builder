@@ -180,7 +180,13 @@ describe('downloadBuild', () => {
     mockFetch.mockResolvedValueOnce({
       ok: true,
       headers: { get: () => 'application/json' },
-      json: () => Promise.resolve({ ok: true, filename: 'my_app.tgz', encoding: 'base64', base64: 'aGVsbG8=' }),
+      json: () =>
+        Promise.resolve({
+          ok: true,
+          filename: 'my_app.tgz',
+          encoding: 'base64',
+          base64: 'aGVsbG8=',
+        }),
     });
     vi.stubGlobal('URL', {
       createObjectURL: vi.fn(() => 'blob:test-url'),

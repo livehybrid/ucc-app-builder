@@ -212,8 +212,8 @@ export function SpecReviewGate({ spec, onBuild, onCancel, busy }: Props) {
     <>
       <Wrap>
         <Message type="info">
-          Review the proposed add-on. Edit anything, then build - the agent will author it
-          to match. {draft.grounded ? <Tag $ok>schema-grounded</Tag> : <Tag>not grounded</Tag>}
+          Review the proposed add-on. Edit anything, then build - the agent will author it to match.{' '}
+          {draft.grounded ? <Tag $ok>schema-grounded</Tag> : <Tag>not grounded</Tag>}
         </Message>
 
         {warnings.length > 0 && (
@@ -278,7 +278,11 @@ export function SpecReviewGate({ spec, onBuild, onCancel, busy }: Props) {
           </Row>
           {draft.account.fields.map((f, i) => (
             <div key={i}>
-              {renderFieldRow(f, (patch) => setAccountField(i, patch), () => removeAccountField(i))}
+              {renderFieldRow(
+                f,
+                (patch) => setAccountField(i, patch),
+                () => removeAccountField(i)
+              )}
             </div>
           ))}
           <div>
@@ -289,7 +293,11 @@ export function SpecReviewGate({ spec, onBuild, onCancel, busy }: Props) {
         <Card>
           <SectionTitle level={5}>Settings</SectionTitle>
           <Row>
-            <Switch selected={draft.proxy} onClick={() => top({ proxy: !draft.proxy })} appearance="toggle">
+            <Switch
+              selected={draft.proxy}
+              onClick={() => top({ proxy: !draft.proxy })}
+              appearance="toggle"
+            >
               Proxy support
             </Switch>
             <Switch
@@ -333,7 +341,11 @@ export function SpecReviewGate({ spec, onBuild, onCancel, busy }: Props) {
                   ))}
                 </Select>
               </FieldLabel>
-              <Button appearance="destructive" onClick={() => removeInput(i)} label="remove input" />
+              <Button
+                appearance="destructive"
+                onClick={() => removeInput(i)}
+                label="remove input"
+              />
             </Row>
             <Row>
               <FieldLabel>
@@ -348,7 +360,11 @@ export function SpecReviewGate({ spec, onBuild, onCancel, busy }: Props) {
             <Row>
               <FieldLabel>
                 sourcetype
-                {txt(inp.sourcetype, (v) => setInput(i, { sourcetype: v }), 'vendor:product:dataset')}
+                {txt(
+                  inp.sourcetype,
+                  (v) => setInput(i, { sourcetype: v }),
+                  'vendor:product:dataset'
+                )}
               </FieldLabel>
               <FieldLabel style={{ maxWidth: 140 }}>
                 CIM model

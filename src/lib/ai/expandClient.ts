@@ -36,9 +36,7 @@ export async function expandRequest(opts: ExpandOptions): Promise<UccSpec> {
     temperature: 0.2,
   });
 
-  const url = opts.serverManaged
-    ? '/api/ai/chat'
-    : 'https://openrouter.ai/api/v1/chat/completions';
+  const url = opts.serverManaged ? '/api/ai/chat' : 'https://openrouter.ai/api/v1/chat/completions';
   const headers: Record<string, string> = { 'Content-Type': 'application/json' };
   if (!opts.serverManaged) {
     headers['Authorization'] = `Bearer ${opts.apiKey ?? ''}`;
@@ -82,9 +80,7 @@ export async function expandRequest(opts: ExpandOptions): Promise<UccSpec> {
 }
 
 function namesFrom(payload: unknown, key: string): string[] {
-  const arr = Array.isArray(payload)
-    ? payload
-    : (payload as Record<string, unknown>)?.[key];
+  const arr = Array.isArray(payload) ? payload : (payload as Record<string, unknown>)?.[key];
   if (!Array.isArray(arr)) return [];
   return arr
     .map((x) => (typeof x === 'string' ? x : (x as Record<string, unknown>)?.name))

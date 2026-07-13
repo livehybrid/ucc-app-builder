@@ -527,7 +527,8 @@ export function GitHubPanel({
                   Include CI/CD workflow (ucc-gen build + AppInspect)
                 </Switch>
                 <p style={{ fontSize: '0.8em', color: '#9b9ea3', margin: '2px 0 0 0' }}>
-                  Adds <code>{CI_WORKFLOW_PATH}</code> so every push builds and AppInspect-validates the add-on.
+                  Adds <code>{CI_WORKFLOW_PATH}</code> so every push builds and AppInspect-validates
+                  the add-on.
                 </p>
               </div>
               <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '10px' }}>

@@ -24,7 +24,13 @@ export interface SourcetypeTestSpec {
    * pytest-splunk-addon input_type for the sample stanza - how Splunk would ingest these
    * events. Defaults to "modinput" (UCC/AOB modular inputs).
    */
-  inputType?: 'modinput' | 'scripted_input' | 'file_monitor' | 'uf_file_monitor' | 'syslog_tcp' | 'default';
+  inputType?:
+    | 'modinput'
+    | 'scripted_input'
+    | 'file_monitor'
+    | 'uf_file_monitor'
+    | 'syslog_tcp'
+    | 'default';
   /** CIM data model(s) this sourcetype should comply with (documented in the README). */
   cimDataModels?: string[];
   /**
@@ -102,7 +108,9 @@ export function buildSampleFiles(spec: PytestScaffoldSpec): ScaffoldFile[] {
 
 /** The Basic-subclass test module that triggers pytest-splunk-addon's standard suite. */
 function buildTestModule(addonName: string): string {
-  const cls = 'Test_' + (safeName(addonName).replace(/(^|_)([a-z])/g, (_m, _s, c) => c.toUpperCase()) || 'Addon');
+  const cls =
+    'Test_' +
+    (safeName(addonName).replace(/(^|_)([a-z])/g, (_m, _s, c) => c.toUpperCase()) || 'Addon');
   return `"""
 pytest-splunk-addon entry point for ${addonName}.
 
@@ -141,7 +149,8 @@ pytest>=7.0
 function buildReadme(spec: PytestScaffoldSpec): string {
   const sts = spec.sourcetypes
     .map((st) => {
-      const cim = st.cimDataModels && st.cimDataModels.length ? ` - CIM: ${st.cimDataModels.join(', ')}` : '';
+      const cim =
+        st.cimDataModels && st.cimDataModels.length ? ` - CIM: ${st.cimDataModels.join(', ')}` : '';
       return `- \`${st.sourcetype}\` (samples: \`tests/data/samples/${sampleFileName(st.sourcetype)}\`)${cim}`;
     })
     .join('\n');
