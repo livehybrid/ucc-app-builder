@@ -3,6 +3,7 @@ name: CI
 on:
   push:
     branches: [main, agentic-appinspect-loop, feat/splunk-app-mcp-tools, feat/splunk-native-ui]
+    tags: ['v*']
   pull_request:
     branches: [main]
 
@@ -370,3 +371,17 @@ jobs:
             playwright-report/
             test-results/
           retention-days: 7
+
+  # On a v* tag: once every gate above is green, publish a GitHub Release for
+  # the tag with the Splunk app tarball attached, via the same reusable
+  # livehybrid pipeline the other apps use (splunk-data-dictionary etc.). The
+  # reusable job downloads ALL run artifacts and attaches **/*.tar.gz — here
+  # that is ucc_app_builder.tar.gz from the 'ucc_app_builder-splunk-app'
+  # artifact uploaded by the splunk-app job.
+  publish:
+    name: Publish release (tarball -> GitHub Release, via reusable pipeline)
+    if: startsWith(github.ref, 'refs/tags/v')
+    needs: [build-test, loop-smoke, splunk-app, official-appinspect-cloud, splunk-integration, licenses, e2e]
+    permissions:
+      contents: write
+    uses: livehybrid/deploy-splunk-app-action/.github/workflows/publish.yml@main
