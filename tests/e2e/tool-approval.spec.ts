@@ -70,7 +70,7 @@ test('approval card renders and "Approve for session" resumes the run', async ({
 
   const textarea = page.locator('textarea').last();
   await textarea.fill('Use my real indexes to verify the sourcetype.');
-  await page.getByRole('button', { name: 'Send' }).click();
+  await page.getByRole('button', { name: 'Build now' }).click();
 
   // The approval card renders with the tool name, the reason, and three buttons.
   await expect(page.getByText('Review AI Changes: run_splunk_query')).toBeVisible({ timeout: 15_000 });
@@ -98,7 +98,7 @@ test('Deny on the approval card sends a deny decision', async ({ page }) => {
 
   const textarea = page.locator('textarea').last();
   await textarea.fill('Use my real indexes.');
-  await page.getByRole('button', { name: 'Send' }).click();
+  await page.getByRole('button', { name: 'Build now' }).click();
 
   await expect(page.getByText('Review AI Changes: run_splunk_query')).toBeVisible({ timeout: 15_000 });
   await page.getByTestId('approval-deny').click();

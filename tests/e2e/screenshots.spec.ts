@@ -78,7 +78,7 @@ test('shot: ai chat with a response', async ({ page }) => {
   await page.getByRole('button', { name: 'AI Agent' }).click();
   const textarea = page.locator('textarea').last();
   await textarea.fill('Add an input that collects GitHub audit events.');
-  await page.getByRole('button', { name: 'Send' }).click();
+  await page.getByRole('button', { name: 'Build now' }).click();
 
   await expect(page.getByText('What input would you like to add?')).toBeVisible({ timeout: 15_000 });
   await page.waitForTimeout(400);

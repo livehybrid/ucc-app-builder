@@ -43,16 +43,26 @@ python3 -m pip install --target "$APPLIB" --upgrade --no-compile \
 # present, which pulls the correct cp313 wheels AND builds the pure-python sdists natively.
 echo "==> installing native build engine (ucc-framework + splunk-appinspect)"
 BUILDPY="${SPLUNK_HOME:-/opt/splunk}/bin/python3"
-if [ -x "$BUILDPY" ] && "$BUILDPY" -c 'import sys; raise SystemExit(0 if sys.version_info[:2]==(3,13) else 1)' 2>/dev/null; then
+if ! { [ -x "$BUILDPY" ] && "$BUILDPY" -c 'import sys; raise SystemExit(0 if sys.version_info[:2]==(3,13) else 1)' 2>/dev/null; }; then
+  # No Splunk python — ANY host py3.13 resolves natively too (same version, same
+  # x86_64 wheels, and it can build the sdist-only deps). CI provides one via
+  # actions/setup-python; locally `uv python install 3.13` works.
+  BUILDPY="$(command -v python3.13 || true)"
+fi
+if [ -n "$BUILDPY" ] && [ -x "$BUILDPY" ] && "$BUILDPY" -c 'import sys; raise SystemExit(0 if sys.version_info[:2]==(3,13) else 1)' 2>/dev/null; then
   echo "    using target interpreter $BUILDPY (native cp313 + sdist resolution)"
-  # Splunk's python needs LD_LIBRARY_PATH=$SPLUNK_HOME/lib for its bundled libssl (pip TLS).
+  # Splunk's python needs LD_LIBRARY_PATH=$SPLUNK_HOME/lib for its bundled libssl (pip TLS);
+  # harmless (empty/missing dir) for a non-Splunk 3.13.
   LD_LIBRARY_PATH="${SPLUNK_HOME:-/opt/splunk}/lib" "$BUILDPY" -m pip install --target "$APPLIB" --upgrade --no-compile \
     splunk-add-on-ucc-framework splunk-appinspect
 else
-  echo "    no target py3.13 interpreter — cross-installing wheels (sdist-only deps like painter need a 3.13 host)"
-  python3 -m pip install --target "$APPLIB" --upgrade --no-compile \
-    --python-version "$PYVER" --only-binary=:all: --platform "$PLAT" --implementation cp \
-    splunk-add-on-ucc-framework splunk-appinspect
+  # This fallback CANNOT resolve AppInspect's dep tree (painter is sdist-only and
+  # --only-binary excludes it) — fail loudly up front with the fix, instead of
+  # letting pip die on ResolutionImpossible after several minutes.
+  echo "ERROR: no python3.13 available (neither \$SPLUNK_HOME/bin/python3 nor python3.13 on PATH)." >&2
+  echo "       The AppInspect vendoring step needs a real 3.13 interpreter: install one" >&2
+  echo "       (e.g. 'uv python install 3.13' or actions/setup-python 3.13) and re-run." >&2
+  exit 1
 fi
 
 # The UCC Configuration-page REST handler (+ our advisor/proxy handlers that read it)

@@ -110,6 +110,15 @@ jobs:
         with:
           submodules: true
 
+      # build_agent_app.sh's AppInspect-vendoring step needs a REAL py3.13 (the
+      # target runtime): its dep tree includes sdist-only packages, so the
+      # cross-install fallback can never resolve. Installed BEFORE 3.11 so 3.11
+      # stays the default python3; the script finds `python3.13` on PATH.
+      - name: Setup Python 3.13 (target interpreter for the vendored stack)
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+
       - name: Setup Python
         uses: actions/setup-python@v5
         with:
@@ -205,6 +214,11 @@ jobs:
         with:
           submodules: true
 
+      - name: Setup Python 3.13 (target interpreter for the vendored stack)
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+
       - name: Setup Python
         uses: actions/setup-python@v5
         with:
@@ -295,6 +309,11 @@ jobs:
         with:
           node-version: '20'
           cache: 'npm'
+
+      - name: Setup Python 3.13 (target interpreter for the vendored stack)
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
 
       - name: Setup Python
         uses: actions/setup-python@v5
