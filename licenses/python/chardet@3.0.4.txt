@@ -1,0 +1,6 @@
+chardet 3.0.4
+License: GNU Library or Lesser General Public License (LGPL)
+Homepage: https://github.com/chardet/chardet
+========================================================================
+
+(no bundled license text found; see SPDX id above)

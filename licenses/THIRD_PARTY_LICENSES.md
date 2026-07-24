@@ -3,11 +3,18 @@
 All third-party libraries bundled in **UCC App Builder** are open source. This inventory is generated automatically by [`scripts/generate_licenses.py`](../scripts/generate_licenses.py) and verified in CI (the `licenses` job fails if any dependency is not a recognised open-source license).
 
 - **npm** (production dependency closure): **412** packages
-- **python** (in-Splunk advisor / Agent SDK stack): **81** packages
+- **python** (in-Splunk advisor / Agent SDK stack): **99** packages
 - Full license texts: [`licenses/npm/`](npm/) and [`licenses/python/`](python/)
 - Machine-readable: [`licenses/manifest.json`](manifest.json)
 
 > The project's own license is [`LICENSE`](../LICENSE) (Apache-2.0).
+
+## ⚠️ Needs review (license not recognised as OSS)
+
+| Package | Version | License | Homepage |
+|---|---|---|---|
+| `splunk-appinspect` | 4.2.1 | Proprietary | — |
+
 
 ## npm dependencies
 
@@ -431,85 +438,103 @@ All third-party libraries bundled in **UCC App Builder** are open source. This i
 
 | Package | Version | License | Homepage |
 |---|---|---|---|
-| `annotated-types` | 0.7.0 | MIT | — |
-| `anyio` | 4.13.0 | MIT | — |
+| `addonfactory_splunk_conf_parser_lib` | 1.0.0 | Apache-2.0 | — |
+| `annotated-types` | 0.8.0 | MIT | — |
+| `anyio` | 4.14.2 | MIT | — |
 | `attrs` | 26.1.0 | MIT | — |
-| `certifi` | 2026.5.20 | MPL-2.0 | [link](https://github.com/certifi/python-certifi) |
-| `cffi` | 2.0.0 | MIT | — |
-| `charset-normalizer` | 3.4.7 | MIT | — |
-| `click` | 8.4.1 | BSD-3-Clause | — |
+| `beautifulsoup4` | 4.10.0 | MIT | [link](http://www.crummy.com/software/BeautifulSoup/bs4/) |
+| `certifi` | 2026.7.22 | MPL-2.0 | [link](https://github.com/certifi/python-certifi) |
+| `cffi` | 2.1.0 | MIT-0 | — |
+| `chardet` | 3.0.4 | GNU Library or Lesser General Public License (LGPL) | [link](https://github.com/chardet/chardet) |
+| `charset-normalizer` | 3.4.9 | MIT | — |
+| `click` | 8.4.2 | BSD-3-Clause | — |
+| `colorama` | 0.4.6 | BSD | — |
+| `croniter` | 1.4.1 | MIT | [link](http://github.com/kiorky/croniter) |
 | `cryptography` | 49.0.0 | Apache-2.0 OR BSD-3-Clause | — |
 | `defusedxml` | 0.7.1 | PSF | [link](https://github.com/tiran/defusedxml) |
 | `deprecation` | 2.1.0 | Apache-2.0 | [link](http://deprecation.readthedocs.io/) |
 | `distro` | 1.9.0 | Apache-2.0 | [link](https://github.com/python-distro/distro) |
-| `exceptiongroup` | 1.3.1 | MIT | — |
+| `dunamai` | 1.26.1 | MIT | — |
 | `googleapis-common-protos` | 1.75.0 | Apache-2.0 | — |
-| `grpcio` | 1.81.1 | Apache-2.0 | — |
+| `grpcio` | 1.83.0 | Apache-2.0 | — |
 | `h11` | 0.16.0 | MIT | [link](https://github.com/python-hyper/h11) |
 | `httpcore` | 1.0.9 | BSD-3-Clause | — |
 | `httpx` | 0.28.1 | BSD | — |
 | `httpx-sse` | 0.4.3 | MIT | — |
 | `idna` | 3.18 | BSD-3-Clause | — |
-| `jiter` | 0.15.0 | MIT | — |
+| `Jinja2` | 3.1.6 | BSD | — |
+| `jiter` | 0.16.0 | MIT | — |
 | `jsonpatch` | 1.33 | BSD | [link](https://github.com/stefankoegl/python-json-patch) |
 | `jsonpointer` | 3.1.1 | BSD | [link](https://github.com/stefankoegl/python-json-pointer) |
 | `jsonschema` | 4.26.0 | MIT | — |
 | `jsonschema-specifications` | 2025.9.1 | MIT | — |
-| `langchain` | 1.3.9 | MIT | — |
-| `langchain-core` | 1.4.7 | MIT | — |
-| `langchain-openai` | 1.3.2 | MIT | — |
-| `langchain-protocol` | 0.0.17 | MIT | — |
-| `langgraph` | 1.2.5 | MIT | — |
+| `langchain` | 1.3.14 | MIT | — |
+| `langchain-core` | 1.5.1 | MIT | — |
+| `langchain-openai` | 1.4.1 | MIT | — |
+| `langchain-protocol` | 0.0.18 | MIT | — |
+| `langgraph` | 1.2.9 | MIT | — |
 | `langgraph-checkpoint` | 4.1.1 | MIT | — |
 | `langgraph-prebuilt` | 1.1.0 | MIT | — |
 | `langgraph-sdk` | 0.4.2 | MIT | — |
-| `langsmith` | 0.8.15 | MIT | — |
-| `mcp` | 1.27.2 | MIT | — |
-| `openai` | 2.41.1 | Apache-2.0 | — |
-| `opentelemetry-api` | 1.42.1 | Apache-2.0 | — |
-| `opentelemetry-exporter-otlp-proto-common` | 1.42.1 | Apache-2.0 | — |
-| `opentelemetry-exporter-otlp-proto-grpc` | 1.42.1 | Apache-2.0 | — |
-| `opentelemetry-proto` | 1.42.1 | Apache-2.0 | — |
-| `opentelemetry-sdk` | 1.42.1 | Apache-2.0 | — |
-| `opentelemetry-semantic-conventions` | 0.63b1 | Apache-2.0 | — |
+| `langsmith` | 0.10.10 | MIT | — |
+| `lxml` | 5.4.0 | BSD | [link](https://lxml.de/) |
+| `Mako` | 1.3.12 | MIT | [link](https://www.makotemplates.org/) |
+| `Markdown` | 3.10.2 | BSD-3-Clause | — |
+| `MarkupSafe` | 3.0.3 | BSD-3-Clause | — |
+| `mcp` | 1.28.1 | MIT | — |
+| `openai` | 2.48.0 | Apache-2.0 | — |
+| `opentelemetry-api` | 1.44.0 | Apache-2.0 | — |
+| `opentelemetry-exporter-otlp-proto-common` | 1.44.0 | Apache-2.0 | — |
+| `opentelemetry-exporter-otlp-proto-grpc` | 1.44.0 | Apache-2.0 | — |
+| `opentelemetry-proto` | 1.44.0 | Apache-2.0 | — |
+| `opentelemetry-sdk` | 1.44.0 | Apache-2.0 | — |
+| `opentelemetry-semantic-conventions` | 0.65b0 | Apache-2.0 | — |
 | `orjson` | 3.11.9 | MPL-2.0 AND (Apache-2.0 OR MIT) | — |
 | `ormsgpack` | 1.12.2 | Apache-2.0 OR MIT | — |
 | `packaging` | 26.2 | Apache-2.0 OR BSD-2-Clause | — |
-| `protobuf` | 6.33.6 | 3-Clause BSD License | [link](https://developers.google.com/protocol-buffers/) |
+| `packaging-legacy` | 23.0 | Apache-2.0 OR BSD | — |
+| `painter` | 0.3.1 | MIT | [link](https://github.com/fgimian/painter) |
+| `protobuf` | 7.35.1 | 3-Clause BSD License | [link](https://developers.google.com/protocol-buffers/) |
 | `pycparser` | 3.0 | BSD-3-Clause | — |
 | `pydantic` | 2.13.4 | MIT | — |
-| `pydantic-settings` | 2.14.1 | MIT | — |
+| `pydantic-settings` | 2.14.2 | MIT | — |
 | `pydantic_core` | 2.46.4 | MIT | — |
 | `PyJWT` | 2.13.0 | MIT | — |
 | `PySocks` | 1.7.1 | BSD | [link](https://github.com/Anorov/PySocks) |
+| `python-dateutil` | 2.9.0.post0 | BSD OR Apache-2.0 | [link](https://github.com/dateutil/dateutil) |
 | `python-dotenv` | 1.2.2 | BSD-3-Clause | — |
+| `python-magic` | 0.4.24 | MIT | [link](http://github.com/ahupp/python-magic) |
 | `python-multipart` | 0.0.32 | Apache-2.0 | — |
 | `PyYAML` | 6.0.3 | MIT | [link](https://pyyaml.org/) |
 | `referencing` | 0.37.0 | MIT | — |
-| `regex` | 2026.5.9 | Apache-2.0 AND CNRI-Python | — |
+| `regex` | 2026.7.19 | Apache-2.0 AND CNRI-Python | — |
 | `requests` | 2.34.2 | Apache-2.0 | — |
 | `requests-toolbelt` | 1.0.0 | Apache-2.0 | [link](https://toolbelt.readthedocs.io/) |
-| `rpds-py` | 0.30.0 | MIT | — |
-| `rpds-py` | 2026.5.1 | MIT | — |
+| `rpds-py` | 2026.6.3 | MIT | — |
+| `semver` | 3.0.4 | BSD-3-Clause | — |
+| `six` | 1.17.0 | MIT | [link](https://github.com/benjaminp/six) |
 | `sniffio` | 1.3.1 | MIT OR Apache-2.0 | — |
 | `solnlib` | 8.1.0 | Apache-2.0 | — |
 | `sortedcontainers` | 2.4.0 | Apache-2.0 | [link](http://www.grantjenks.com/docs/sortedcontainers/) |
+| `soupsieve` | 2.9.1 | MIT | — |
+| `splunk-appinspect` | 4.2.1 | Proprietary | — |
 | `splunk-sdk` | 2.1.1 | Apache-2.0 | [link](http://github.com/splunk/splunk-sdk-python) |
+| `splunk_add_on_ucc_framework` | 6.5.2 | Apache-2.0 | — |
 | `splunklib` | 3.0.0 (vendored from splunk-sdk) | Apache-2.0 | [link](https://github.com/splunk/splunk-sdk-python) |
 | `splunktaucclib` | 8.2.0 | Apache-2.0 | — |
-| `sse-starlette` | 3.4.4 | BSD-3-Clause | — |
+| `sse-starlette` | 3.4.6 | BSD-3-Clause | — |
 | `starlette` | 1.3.1 | BSD-3-Clause | — |
+| `structlog` | 24.4.0 | MIT OR Apache-2.0 | — |
 | `tenacity` | 9.1.4 | Apache-2.0 | [link](https://github.com/jd/tenacity) |
 | `tiktoken` | 0.11.0 | MIT License | — |
 | `tiktoken` | 0.13.0 | MIT License | — |
-| `tqdm` | 4.68.2 | MPL-2.0 AND MIT | — |
+| `tqdm` | 4.69.0 | MPL-2.0 AND MIT | — |
 | `typing-inspection` | 0.4.2 | MIT | — |
-| `typing_extensions` | 4.15.0 | PSF-2.0 | — |
+| `typing_extensions` | 4.16.0 | PSF-2.0 | — |
 | `urllib3` | 1.26.20 | MIT | [link](https://urllib3.readthedocs.io/) |
-| `urllib3` | 2.7.0 | MIT | — |
-| `uuid_utils` | 0.16.0 | BSD-3-Clause | — |
-| `uvicorn` | 0.49.0 | BSD-3-Clause | — |
+| `uuid_utils` | 0.17.0 | BSD-3-Clause | — |
+| `uvicorn` | 0.51.0 | BSD-3-Clause | — |
 | `websockets` | 15.0.1 | BSD | — |
-| `xxhash` | 3.7.0 | BSD | [link](https://github.com/ifduyue/python-xxhash) |
+| `xxhash` | 3.8.1 | BSD-2-Clause | [link](https://github.com/ifduyue/python-xxhash) |
 | `zstandard` | 0.25.0 | BSD-3-Clause | — |
 

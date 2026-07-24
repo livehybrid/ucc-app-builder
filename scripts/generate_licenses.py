@@ -39,6 +39,25 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 OUT = ROOT / "licenses"
 
+# Per-package corrections for wrong/absent wheel metadata; the value is the real
+# SPDX license, verified from the project repository.
+LICENSE_OVERRIDES = {
+    # semver ships no License-Expression/classifier and its License: field is a
+    # copyright line. Actual license: BSD-3-Clause
+    # (https://github.com/python-semver/python-semver/blob/master/LICENSE.txt).
+    "semver": "BSD-3-Clause",
+}
+
+# Packages that are deliberately NOT open source but are reviewed and accepted.
+# They stay visibly flagged in THIRD_PARTY_LICENSES.md but do not fail --check.
+REVIEWED_NON_OSS = {
+    # Splunk's own AppInspect tool, published on PyPI as License: Proprietary
+    # (Splunk General Terms). Vendored on purpose - it IS the app's in-Splunk
+    # build engine, and it only ever runs on the Splunk instance the app is
+    # installed on.
+    "splunk-appinspect",
+}
+
 # Recognised open-source license tokens (normalised upper-case, SPDX-ish). The
 # point of the --check gate is to prove every bundled lib is OSS; OSI-approved
 # copyleft (GPL/LGPL/MPL/etc.) counts as open source and is allowed.
@@ -344,6 +363,7 @@ def _parse_metadata(meta_path: Path) -> dict:
     if not license_str:
         # License: can be a full text blob; keep only a short first line
         license_str = (lic.splitlines()[0].strip() if lic else "UNKNOWN")[:80]
+    license_str = LICENSE_OVERRIDES.get(name, license_str)
     return {"name": name, "version": version, "license": license_str or "UNKNOWN",
             "homepage": home}
 
@@ -496,17 +516,20 @@ def main() -> int:
     print(f"  manifest: {OUT / 'manifest.json'}")
 
     flagged = [r for r in (npm + py) if not is_oss(r["license"])]
+    blocking = [r for r in flagged if r["name"] not in REVIEWED_NON_OSS]
     if flagged:
         print("\nNON-OSS / UNKNOWN licenses detected:", file=sys.stderr)
         for r in flagged:
+            note = "  (reviewed exemption)" if r["name"] in REVIEWED_NON_OSS else ""
             print(f"  - [{r['ecosystem']}] {r['name']} {r['version']}: "
-                  f"{r['license']!r}", file=sys.stderr)
+                  f"{r['license']!r}{note}", file=sys.stderr)
+    if blocking:
         if args.check:
             print("\nFAIL: not all dependencies are recognised open-source licenses.",
                   file=sys.stderr)
             return 1
         print("(run with --check to make this fail CI)", file=sys.stderr)
-    else:
+    elif not flagged:
         print("All dependencies carry a recognised open-source license. ✅")
     return 0
 

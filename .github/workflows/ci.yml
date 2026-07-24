@@ -149,9 +149,17 @@ jobs:
             --max-messages all --skip-trusted-libraries-update || true
           python - "$RUNNER_TEMP/appinspect.json" <<'PY'
           import json, sys
-          # Inherent to vendoring the Splunk Agent SDK (compiled x86_64 wheels). The app
-          # targets x86_64 Splunk; revisit if multi-arch wheels are bundled.
-          ALLOW = {"check_aarch64_compatibility"}
+          # All three are inherent to the vendored toolchain, not app code:
+          #  - aarch64: ships x86_64 cp313 wheels for the Agent SDK stack; the app
+          #    targets x86_64 Splunk. Revisit if multi-arch wheels are bundled.
+          #  - bundled_node: appinspect's OWN check source (check_splunk_10_0_
+          #    deprecated_features.py) contains the literal `cmd node` pattern it
+          #    scans for — self-inspection artefact; nothing in the app invokes node.
+          #  - multimedia: langsmith/_internal/voice/audio.py uses wave.open; the
+          #    advisor stack never imports or invokes voice support.
+          ALLOW = {"check_aarch64_compatibility",
+                   "check_invoking_bundled_node",
+                   "check_for_python_multimedia_services"}
           d = json.load(open(sys.argv[1]))
           print("AppInspect summary:", json.dumps(d.get("summary", {})))
           bad = []

@@ -98,6 +98,26 @@ if grep -q '^\[triggers\]' "$APPDIR/default/app.conf"; then
 else
   printf '\n[triggers]\nreload.ucc_app_builder_settings = simple\n%s\n' "$RELOAD_TOOLS" >> "$APPDIR/default/app.conf"
 fi
+#  - check_destructive_commands: ucc-framework's wheel ships an AOB-migration helper
+#    shell script (commands/import_from_aob.sh) full of rm -rf. The in-app engine
+#    calls ucc-gen build programmatically and never uses it — drop it.
+rm -f "$APPDIR/lib/splunk_add_on_ucc_framework/commands/import_from_aob.sh"
+#  - check_validate_json_data_is_well_formed: appinspect's wheel ships documentation
+#    JSON with a trailing comma. Repair it in place (and drop it if still unparsable —
+#    it is reference documentation, not needed by `inspect`).
+APPDIR="$APPDIR" python3 - <<'PYJSON'
+import json, os, pathlib, re
+p = pathlib.Path(os.environ["APPDIR"]) / "lib/splunk_appinspect/documentation/tag_reference_documentation.json"
+if p.exists():
+    fixed = re.sub(r",(\s*[}\]])", r"\1", p.read_text())
+    try:
+        json.loads(fixed)
+        p.write_text(fixed)
+        print(f"    repaired trailing commas in {p.name}")
+    except ValueError:
+        p.unlink()
+        print(f"    dropped unparsable {p.name}")
+PYJSON
 #  - check_for_compiled_python: strip __pycache__ / *.pyc from the WHOLE package (wheels in
 #    lib/, AND any bin/ bytecode left by local py_compile checks — AppInspect fails on either).
 find "$APPDIR" -type d -name '__pycache__' -prune -exec rm -rf {} + 2>/dev/null || true

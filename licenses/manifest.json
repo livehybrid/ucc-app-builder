@@ -3710,20 +3710,29 @@
     },
     {
       "ecosystem": "python",
+      "name": "addonfactory_splunk_conf_parser_lib",
+      "version": "1.0.0",
+      "license": "Apache-2.0",
+      "homepage": "",
+      "license_file": "licenses/python/addonfactory_splunk_conf_parser_lib@1.0.0.txt",
+      "is_oss": true
+    },
+    {
+      "ecosystem": "python",
       "name": "annotated-types",
-      "version": "0.7.0",
+      "version": "0.8.0",
       "license": "MIT",
       "homepage": "",
-      "license_file": "licenses/python/annotated-types@0.7.0.txt",
+      "license_file": "licenses/python/annotated-types@0.8.0.txt",
       "is_oss": true
     },
     {
       "ecosystem": "python",
       "name": "anyio",
-      "version": "4.13.0",
+      "version": "4.14.2",
       "license": "MIT",
       "homepage": "",
-      "license_file": "licenses/python/anyio@4.13.0.txt",
+      "license_file": "licenses/python/anyio@4.14.2.txt",
       "is_oss": true
     },
     {
@@ -3737,38 +3746,74 @@
     },
     {
       "ecosystem": "python",
+      "name": "beautifulsoup4",
+      "version": "4.10.0",
+      "license": "MIT",
+      "homepage": "http://www.crummy.com/software/BeautifulSoup/bs4/",
+      "license_file": "licenses/python/beautifulsoup4@4.10.0.txt",
+      "is_oss": true
+    },
+    {
+      "ecosystem": "python",
       "name": "certifi",
-      "version": "2026.5.20",
+      "version": "2026.7.22",
       "license": "MPL-2.0",
       "homepage": "https://github.com/certifi/python-certifi",
-      "license_file": "licenses/python/certifi@2026.5.20.txt",
+      "license_file": "licenses/python/certifi@2026.7.22.txt",
       "is_oss": true
     },
     {
       "ecosystem": "python",
       "name": "cffi",
-      "version": "2.0.0",
-      "license": "MIT",
+      "version": "2.1.0",
+      "license": "MIT-0",
       "homepage": "",
-      "license_file": "licenses/python/cffi@2.0.0.txt",
+      "license_file": "licenses/python/cffi@2.1.0.txt",
+      "is_oss": true
+    },
+    {
+      "ecosystem": "python",
+      "name": "chardet",
+      "version": "3.0.4",
+      "license": "GNU Library or Lesser General Public License (LGPL)",
+      "homepage": "https://github.com/chardet/chardet",
+      "license_file": "licenses/python/chardet@3.0.4.txt",
       "is_oss": true
     },
     {
       "ecosystem": "python",
       "name": "charset-normalizer",
-      "version": "3.4.7",
+      "version": "3.4.9",
       "license": "MIT",
       "homepage": "",
-      "license_file": "licenses/python/charset-normalizer@3.4.7.txt",
+      "license_file": "licenses/python/charset-normalizer@3.4.9.txt",
       "is_oss": true
     },
     {
       "ecosystem": "python",
       "name": "click",
-      "version": "8.4.1",
+      "version": "8.4.2",
       "license": "BSD-3-Clause",
       "homepage": "",
-      "license_file": "licenses/python/click@8.4.1.txt",
+      "license_file": "licenses/python/click@8.4.2.txt",
+      "is_oss": true
+    },
+    {
+      "ecosystem": "python",
+      "name": "colorama",
+      "version": "0.4.6",
+      "license": "BSD",
+      "homepage": "",
+      "license_file": "licenses/python/colorama@0.4.6.txt",
+      "is_oss": true
+    },
+    {
+      "ecosystem": "python",
+      "name": "croniter",
+      "version": "1.4.1",
+      "license": "MIT",
+      "homepage": "http://github.com/kiorky/croniter",
+      "license_file": "licenses/python/croniter@1.4.1.txt",
       "is_oss": true
     },
     {
@@ -3809,11 +3854,11 @@
     },
     {
       "ecosystem": "python",
-      "name": "exceptiongroup",
-      "version": "1.3.1",
+      "name": "dunamai",
+      "version": "1.26.1",
       "license": "MIT",
       "homepage": "",
-      "license_file": "licenses/python/exceptiongroup@1.3.1.txt",
+      "license_file": "licenses/python/dunamai@1.26.1.txt",
       "is_oss": true
     },
     {
@@ -3828,10 +3873,10 @@
     {
       "ecosystem": "python",
       "name": "grpcio",
-      "version": "1.81.1",
+      "version": "1.83.0",
       "license": "Apache-2.0",
       "homepage": "",
-      "license_file": "licenses/python/grpcio@1.81.1.txt",
+      "license_file": "licenses/python/grpcio@1.83.0.txt",
       "is_oss": true
     },
     {
@@ -3881,11 +3926,20 @@
     },
     {
       "ecosystem": "python",
+      "name": "Jinja2",
+      "version": "3.1.6",
+      "license": "BSD",
+      "homepage": "",
+      "license_file": "licenses/python/Jinja2@3.1.6.txt",
+      "is_oss": true
+    },
+    {
+      "ecosystem": "python",
       "name": "jiter",
-      "version": "0.15.0",
+      "version": "0.16.0",
       "license": "MIT",
       "homepage": "",
-      "license_file": "licenses/python/jiter@0.15.0.txt",
+      "license_file": "licenses/python/jiter@0.16.0.txt",
       "is_oss": true
     },
     {
@@ -3927,46 +3981,46 @@
     {
       "ecosystem": "python",
       "name": "langchain",
-      "version": "1.3.9",
+      "version": "1.3.14",
       "license": "MIT",
       "homepage": "",
-      "license_file": "licenses/python/langchain@1.3.9.txt",
+      "license_file": "licenses/python/langchain@1.3.14.txt",
       "is_oss": true
     },
     {
       "ecosystem": "python",
       "name": "langchain-core",
-      "version": "1.4.7",
+      "version": "1.5.1",
       "license": "MIT",
       "homepage": "",
-      "license_file": "licenses/python/langchain-core@1.4.7.txt",
+      "license_file": "licenses/python/langchain-core@1.5.1.txt",
       "is_oss": true
     },
     {
       "ecosystem": "python",
       "name": "langchain-openai",
-      "version": "1.3.2",
+      "version": "1.4.1",
       "license": "MIT",
       "homepage": "",
-      "license_file": "licenses/python/langchain-openai@1.3.2.txt",
+      "license_file": "licenses/python/langchain-openai@1.4.1.txt",
       "is_oss": true
     },
     {
       "ecosystem": "python",
       "name": "langchain-protocol",
-      "version": "0.0.17",
+      "version": "0.0.18",
       "license": "MIT",
       "homepage": "",
-      "license_file": "licenses/python/langchain-protocol@0.0.17.txt",
+      "license_file": "licenses/python/langchain-protocol@0.0.18.txt",
       "is_oss": true
     },
     {
       "ecosystem": "python",
       "name": "langgraph",
-      "version": "1.2.5",
+      "version": "1.2.9",
       "license": "MIT",
       "homepage": "",
-      "license_file": "licenses/python/langgraph@1.2.5.txt",
+      "license_file": "licenses/python/langgraph@1.2.9.txt",
       "is_oss": true
     },
     {
@@ -3999,82 +4053,118 @@
     {
       "ecosystem": "python",
       "name": "langsmith",
-      "version": "0.8.15",
+      "version": "0.10.10",
       "license": "MIT",
       "homepage": "",
-      "license_file": "licenses/python/langsmith@0.8.15.txt",
+      "license_file": "licenses/python/langsmith@0.10.10.txt",
+      "is_oss": true
+    },
+    {
+      "ecosystem": "python",
+      "name": "lxml",
+      "version": "5.4.0",
+      "license": "BSD",
+      "homepage": "https://lxml.de/",
+      "license_file": "licenses/python/lxml@5.4.0.txt",
+      "is_oss": true
+    },
+    {
+      "ecosystem": "python",
+      "name": "Mako",
+      "version": "1.3.12",
+      "license": "MIT",
+      "homepage": "https://www.makotemplates.org/",
+      "license_file": "licenses/python/Mako@1.3.12.txt",
+      "is_oss": true
+    },
+    {
+      "ecosystem": "python",
+      "name": "Markdown",
+      "version": "3.10.2",
+      "license": "BSD-3-Clause",
+      "homepage": "",
+      "license_file": "licenses/python/Markdown@3.10.2.txt",
+      "is_oss": true
+    },
+    {
+      "ecosystem": "python",
+      "name": "MarkupSafe",
+      "version": "3.0.3",
+      "license": "BSD-3-Clause",
+      "homepage": "",
+      "license_file": "licenses/python/MarkupSafe@3.0.3.txt",
       "is_oss": true
     },
     {
       "ecosystem": "python",
       "name": "mcp",
-      "version": "1.27.2",
+      "version": "1.28.1",
       "license": "MIT",
       "homepage": "",
-      "license_file": "licenses/python/mcp@1.27.2.txt",
+      "license_file": "licenses/python/mcp@1.28.1.txt",
       "is_oss": true
     },
     {
       "ecosystem": "python",
       "name": "openai",
-      "version": "2.41.1",
+      "version": "2.48.0",
       "license": "Apache-2.0",
       "homepage": "",
-      "license_file": "licenses/python/openai@2.41.1.txt",
+      "license_file": "licenses/python/openai@2.48.0.txt",
       "is_oss": true
     },
     {
       "ecosystem": "python",
       "name": "opentelemetry-api",
-      "version": "1.42.1",
+      "version": "1.44.0",
       "license": "Apache-2.0",
       "homepage": "",
-      "license_file": "licenses/python/opentelemetry-api@1.42.1.txt",
+      "license_file": "licenses/python/opentelemetry-api@1.44.0.txt",
       "is_oss": true
     },
     {
       "ecosystem": "python",
       "name": "opentelemetry-exporter-otlp-proto-common",
-      "version": "1.42.1",
+      "version": "1.44.0",
       "license": "Apache-2.0",
       "homepage": "",
-      "license_file": "licenses/python/opentelemetry-exporter-otlp-proto-common@1.42.1.txt",
+      "license_file": "licenses/python/opentelemetry-exporter-otlp-proto-common@1.44.0.txt",
       "is_oss": true
     },
     {
       "ecosystem": "python",
       "name": "opentelemetry-exporter-otlp-proto-grpc",
-      "version": "1.42.1",
+      "version": "1.44.0",
       "license": "Apache-2.0",
       "homepage": "",
-      "license_file": "licenses/python/opentelemetry-exporter-otlp-proto-grpc@1.42.1.txt",
+      "license_file": "licenses/python/opentelemetry-exporter-otlp-proto-grpc@1.44.0.txt",
       "is_oss": true
     },
     {
       "ecosystem": "python",
       "name": "opentelemetry-proto",
-      "version": "1.42.1",
+      "version": "1.44.0",
       "license": "Apache-2.0",
       "homepage": "",
-      "license_file": "licenses/python/opentelemetry-proto@1.42.1.txt",
+      "license_file": "licenses/python/opentelemetry-proto@1.44.0.txt",
       "is_oss": true
     },
     {
       "ecosystem": "python",
       "name": "opentelemetry-sdk",
-      "version": "1.42.1",
+      "version": "1.44.0",
       "license": "Apache-2.0",
       "homepage": "",
-      "license_file": "licenses/python/opentelemetry-sdk@1.42.1.txt",
+      "license_file": "licenses/python/opentelemetry-sdk@1.44.0.txt",
       "is_oss": true
     },
     {
       "ecosystem": "python",
       "name": "opentelemetry-semantic-conventions",
-      "version": "0.63b1",
+      "version": "0.65b0",
       "license": "Apache-2.0",
       "homepage": "",
-      "license_file": "licenses/python/opentelemetry-semantic-conventions@0.63b1.txt",
+      "license_file": "licenses/python/opentelemetry-semantic-conventions@0.65b0.txt",
       "is_oss": true
     },
     {
@@ -4106,11 +4196,29 @@
     },
     {
       "ecosystem": "python",
+      "name": "packaging-legacy",
+      "version": "23.0",
+      "license": "Apache-2.0 OR BSD",
+      "homepage": "",
+      "license_file": "licenses/python/packaging-legacy@23.0.txt",
+      "is_oss": true
+    },
+    {
+      "ecosystem": "python",
+      "name": "painter",
+      "version": "0.3.1",
+      "license": "MIT",
+      "homepage": "https://github.com/fgimian/painter",
+      "license_file": "licenses/python/painter@0.3.1.txt",
+      "is_oss": true
+    },
+    {
+      "ecosystem": "python",
       "name": "protobuf",
-      "version": "6.33.6",
+      "version": "7.35.1",
       "license": "3-Clause BSD License",
       "homepage": "https://developers.google.com/protocol-buffers/",
-      "license_file": "licenses/python/protobuf@6.33.6.txt",
+      "license_file": "licenses/python/protobuf@7.35.1.txt",
       "is_oss": true
     },
     {
@@ -4134,10 +4242,10 @@
     {
       "ecosystem": "python",
       "name": "pydantic-settings",
-      "version": "2.14.1",
+      "version": "2.14.2",
       "license": "MIT",
       "homepage": "",
-      "license_file": "licenses/python/pydantic-settings@2.14.1.txt",
+      "license_file": "licenses/python/pydantic-settings@2.14.2.txt",
       "is_oss": true
     },
     {
@@ -4169,11 +4277,29 @@
     },
     {
       "ecosystem": "python",
+      "name": "python-dateutil",
+      "version": "2.9.0.post0",
+      "license": "BSD OR Apache-2.0",
+      "homepage": "https://github.com/dateutil/dateutil",
+      "license_file": "licenses/python/python-dateutil@2.9.0.post0.txt",
+      "is_oss": true
+    },
+    {
+      "ecosystem": "python",
       "name": "python-dotenv",
       "version": "1.2.2",
       "license": "BSD-3-Clause",
       "homepage": "",
       "license_file": "licenses/python/python-dotenv@1.2.2.txt",
+      "is_oss": true
+    },
+    {
+      "ecosystem": "python",
+      "name": "python-magic",
+      "version": "0.4.24",
+      "license": "MIT",
+      "homepage": "http://github.com/ahupp/python-magic",
+      "license_file": "licenses/python/python-magic@0.4.24.txt",
       "is_oss": true
     },
     {
@@ -4206,10 +4332,10 @@
     {
       "ecosystem": "python",
       "name": "regex",
-      "version": "2026.5.9",
+      "version": "2026.7.19",
       "license": "Apache-2.0 AND CNRI-Python",
       "homepage": "",
-      "license_file": "licenses/python/regex@2026.5.9.txt",
+      "license_file": "licenses/python/regex@2026.7.19.txt",
       "is_oss": true
     },
     {
@@ -4233,19 +4359,28 @@
     {
       "ecosystem": "python",
       "name": "rpds-py",
-      "version": "0.30.0",
+      "version": "2026.6.3",
       "license": "MIT",
       "homepage": "",
-      "license_file": "licenses/python/rpds-py@0.30.0.txt",
+      "license_file": "licenses/python/rpds-py@2026.6.3.txt",
       "is_oss": true
     },
     {
       "ecosystem": "python",
-      "name": "rpds-py",
-      "version": "2026.5.1",
-      "license": "MIT",
+      "name": "semver",
+      "version": "3.0.4",
+      "license": "BSD-3-Clause",
       "homepage": "",
-      "license_file": "licenses/python/rpds-py@2026.5.1.txt",
+      "license_file": "licenses/python/semver@3.0.4.txt",
+      "is_oss": true
+    },
+    {
+      "ecosystem": "python",
+      "name": "six",
+      "version": "1.17.0",
+      "license": "MIT",
+      "homepage": "https://github.com/benjaminp/six",
+      "license_file": "licenses/python/six@1.17.0.txt",
       "is_oss": true
     },
     {
@@ -4277,11 +4412,38 @@
     },
     {
       "ecosystem": "python",
+      "name": "soupsieve",
+      "version": "2.9.1",
+      "license": "MIT",
+      "homepage": "",
+      "license_file": "licenses/python/soupsieve@2.9.1.txt",
+      "is_oss": true
+    },
+    {
+      "ecosystem": "python",
+      "name": "splunk-appinspect",
+      "version": "4.2.1",
+      "license": "Proprietary",
+      "homepage": "",
+      "license_file": "licenses/python/splunk-appinspect@4.2.1.txt",
+      "is_oss": false
+    },
+    {
+      "ecosystem": "python",
       "name": "splunk-sdk",
       "version": "2.1.1",
       "license": "Apache-2.0",
       "homepage": "http://github.com/splunk/splunk-sdk-python",
       "license_file": "licenses/python/splunk-sdk@2.1.1.txt",
+      "is_oss": true
+    },
+    {
+      "ecosystem": "python",
+      "name": "splunk_add_on_ucc_framework",
+      "version": "6.5.2",
+      "license": "Apache-2.0",
+      "homepage": "",
+      "license_file": "licenses/python/splunk_add_on_ucc_framework@6.5.2.txt",
       "is_oss": true
     },
     {
@@ -4305,10 +4467,10 @@
     {
       "ecosystem": "python",
       "name": "sse-starlette",
-      "version": "3.4.4",
+      "version": "3.4.6",
       "license": "BSD-3-Clause",
       "homepage": "",
-      "license_file": "licenses/python/sse-starlette@3.4.4.txt",
+      "license_file": "licenses/python/sse-starlette@3.4.6.txt",
       "is_oss": true
     },
     {
@@ -4318,6 +4480,15 @@
       "license": "BSD-3-Clause",
       "homepage": "",
       "license_file": "licenses/python/starlette@1.3.1.txt",
+      "is_oss": true
+    },
+    {
+      "ecosystem": "python",
+      "name": "structlog",
+      "version": "24.4.0",
+      "license": "MIT OR Apache-2.0",
+      "homepage": "",
+      "license_file": "licenses/python/structlog@24.4.0.txt",
       "is_oss": true
     },
     {
@@ -4350,10 +4521,10 @@
     {
       "ecosystem": "python",
       "name": "tqdm",
-      "version": "4.68.2",
+      "version": "4.69.0",
       "license": "MPL-2.0 AND MIT",
       "homepage": "",
-      "license_file": "licenses/python/tqdm@4.68.2.txt",
+      "license_file": "licenses/python/tqdm@4.69.0.txt",
       "is_oss": true
     },
     {
@@ -4368,10 +4539,10 @@
     {
       "ecosystem": "python",
       "name": "typing_extensions",
-      "version": "4.15.0",
+      "version": "4.16.0",
       "license": "PSF-2.0",
       "homepage": "",
-      "license_file": "licenses/python/typing_extensions@4.15.0.txt",
+      "license_file": "licenses/python/typing_extensions@4.16.0.txt",
       "is_oss": true
     },
     {
@@ -4385,29 +4556,20 @@
     },
     {
       "ecosystem": "python",
-      "name": "urllib3",
-      "version": "2.7.0",
-      "license": "MIT",
-      "homepage": "",
-      "license_file": "licenses/python/urllib3@2.7.0.txt",
-      "is_oss": true
-    },
-    {
-      "ecosystem": "python",
       "name": "uuid_utils",
-      "version": "0.16.0",
+      "version": "0.17.0",
       "license": "BSD-3-Clause",
       "homepage": "",
-      "license_file": "licenses/python/uuid_utils@0.16.0.txt",
+      "license_file": "licenses/python/uuid_utils@0.17.0.txt",
       "is_oss": true
     },
     {
       "ecosystem": "python",
       "name": "uvicorn",
-      "version": "0.49.0",
+      "version": "0.51.0",
       "license": "BSD-3-Clause",
       "homepage": "",
-      "license_file": "licenses/python/uvicorn@0.49.0.txt",
+      "license_file": "licenses/python/uvicorn@0.51.0.txt",
       "is_oss": true
     },
     {
@@ -4422,10 +4584,10 @@
     {
       "ecosystem": "python",
       "name": "xxhash",
-      "version": "3.7.0",
-      "license": "BSD",
+      "version": "3.8.1",
+      "license": "BSD-2-Clause",
       "homepage": "https://github.com/ifduyue/python-xxhash",
-      "license_file": "licenses/python/xxhash@3.7.0.txt",
+      "license_file": "licenses/python/xxhash@3.8.1.txt",
       "is_oss": true
     },
     {
@@ -4438,5 +4600,5 @@
       "is_oss": true
     }
   ],
-  "count": 493
+  "count": 511
 }
