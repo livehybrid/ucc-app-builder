@@ -5,7 +5,7 @@
         "displayName": "UCC App Builder",
         "version": "0.0.0+fa66415",
         "schemaVersion": "0.0.10",
-        "checkForUpdates": false,
+        "checkForUpdates": true,
         "supportedThemes": [
             "light",
             "dark"

@@ -98,6 +98,16 @@ if grep -q '^\[triggers\]' "$APPDIR/default/app.conf"; then
 else
   printf '\n[triggers]\nreload.ucc_app_builder_settings = simple\n%s\n' "$RELOAD_TOOLS" >> "$APPDIR/default/app.conf"
 fi
+#  - Splunkbase upload gate: check_for_updates must NOT be disabled in a
+#    Splunkbase-distributed app (upload rejects with "The check_for_updates field
+#    found in app.conf must not be disabled"). Sources set it true (ucc-app/default/
+#    app.conf [package] + globalConfig meta.checkForUpdates) — fail the build if a
+#    regression sneaks back in, rather than silently shipping an unuploadable package.
+if grep -Eiq '^[[:space:]]*check_for_updates[[:space:]]*=[[:space:]]*(false|0|no|f|n)\b' "$APPDIR/default/app.conf"; then
+  echo "ERROR: built app.conf disables check_for_updates — Splunkbase rejects this." >&2
+  echo "       Fix ucc-app/default/app.conf [package] and globalConfig.json meta.checkForUpdates." >&2
+  exit 1
+fi
 #  - check_destructive_commands: ucc-framework's wheel ships an AOB-migration helper
 #    shell script (commands/import_from_aob.sh) full of rm -rf. The in-app engine
 #    calls ucc-gen build programmatically and never uses it — drop it.
