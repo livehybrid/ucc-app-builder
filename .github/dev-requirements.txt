@@ -1,16 +1,16 @@
-# Pinned Splunk dev toolchain for the DETERMINISTIC loop-smoke CI gate.
+# Splunk dev toolchain for the loop-smoke CI gate.
 #
-# Why pinned: loop-smoke proves the agentic loop reaches AppInspect-CLEAN with NO LLM,
-# so its result must be reproducible. A ucc-gen / splunk-appinspect release can change
-# generated files or check outcomes and flip the gate red on an unrelated day - so the
-# version is pinned here and bumped deliberately.
+# POLICY: always build and test against the LATEST ucc-gen / AppInspect, everywhere the
+# toolchain is used. These were previously hard-pinned (==6.5.1 / ==4.2.1) so the
+# deterministic no-LLM loop-smoke gate could not be flipped red by an unrelated upstream
+# release. That pin is deliberately gone: we would rather find out on the day a new release
+# changes generated files or check outcomes than ship a package built against a stale
+# toolchain. Every other CI job (splunk-app, splunk-integration, licenses) already floated.
 #
-# How updates flow: Dependabot (pip ecosystem, .github/dev-requirements.txt) opens a PR
-# when a newer release ships; the loop-smoke job runs against the bump and must still
-# reach CLEAN before the PR can merge. The other CI jobs (splunk-app, splunk-integration,
-# licenses) intentionally float to the latest ucc-gen (>=) so they always compat-test the
-# newest release on every run.
+# Consequence to expect: a ucc-gen / AppInspect release CAN turn loop-smoke red without any
+# code change here. That is a real signal about the newest release, not CI flakiness - read
+# the diff in the generated output before assuming it is noise.
 #
-# Validated CLEAN locally on both the config-only and input-bearing fixtures at these pins.
-splunk-add-on-ucc-framework==6.5.1
-splunk-appinspect==4.2.1
+# The floors below are compatibility minimums (Splunk 10 / ucc-gen 6.5), not pins.
+splunk-add-on-ucc-framework>=6.5.0
+splunk-appinspect>=4.2.1

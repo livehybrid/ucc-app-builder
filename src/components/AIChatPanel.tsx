@@ -572,6 +572,19 @@ function splunkAgentAvailable(): boolean {
   return (window as unknown as { __UCC_SPLUNK_AGENT__?: boolean }).__UCC_SPLUNK_AGENT__ === true;
 }
 
+/** True when the SPA is running EMBEDDED in Splunk Web (set by ui_loader.js). When it is,
+ *  the app's Configuration → AI Provider tab exists and is the single source of truth for
+ *  provider / key / model / temperature, so the panel must not offer its own copies. */
+function splunkEmbedded(): boolean {
+  return (window as unknown as { __UCC_PROXIED__?: boolean }).__UCC_PROXIED__ === true;
+}
+
+/** Deep link to this app's UCC Configuration page (AI Provider tab). */
+function configurationPageUrl(): string {
+  const locale = window.location.pathname.split('/')[1] || 'en-US';
+  return `/${locale}/app/ucc_app_builder/configuration`;
+}
+
 /** Same-origin fetch to a Splunk REST endpoint under this app (CSRF handled by the
  *  loader). Returns undefined when not running embedded in Splunk. */
 function splunkFetch(path: string, init?: RequestInit): Promise<Response> | undefined {
@@ -645,6 +658,11 @@ export function AIChatPanel({
   // don't apply - provider/model/key/temperature come from the Configuration → AI Provider
   // tab and tools run server-side - so the UI hides them.
   const splunkMode = splunkAgent && useSplunkAgent;
+  // Embedded in Splunk Web: the Configuration → AI Provider tab owns provider/key/model/
+  // temperature for BOTH modes, so the panel shows a read-only summary and a link instead
+  // of duplicating those controls (which previously fought the conf and could send an
+  // OpenRouter model ID to a non-OpenRouter base URL).
+  const embedded = splunkEmbedded();
 
   // Expert Expansion + review gate. `pendingSpec` non-null shows the gate (the chat body is
   // replaced by it); `expanding` is the in-flight expansion LLM call.
@@ -823,8 +841,15 @@ export function AIChatPanel({
   const [pendingApproval, setPendingApproval] = useState<PendingApproval | null>(null);
   const modalReturnRef = useRef(null);
 
-  // Get the active model (custom or selected)
-  const activeModel = useCustomModel && customModelId.trim() ? customModelId.trim() : selectedModel;
+  // Get the active model. Embedded in Splunk the Configuration → AI Provider "Chat / agent
+  // model" wins: the key and base URL already come from there, so letting a stale SPA picker
+  // value through meant e.g. an OpenRouter model ID being POSTed to api.anthropic.com.
+  const configuredChatModel = aiConfig?.configuredModels?.chat || '';
+  const activeModel = embedded
+    ? configuredChatModel || aiConfig?.defaultModel || selectedModel
+    : useCustomModel && customModelId.trim()
+      ? customModelId.trim()
+      : selectedModel;
 
   // Persist chat history to localStorage whenever messages change
   useEffect(() => {
@@ -1556,11 +1581,11 @@ export function AIChatPanel({
     setError(null);
     try {
       const grounding = await fetchGrounding();
-      // In Splunk mode the SPA's picker default is the engine's default (a reasoning
-      // model like kimi-k2.6 whose reasoning can starve `content` → "empty response").
-      // Expansion is structured extraction: use the CONFIGURED chat model (sonnet, etc.)
-      // from the Configuration → AI Provider tab instead.
-      const expansionModel = (splunkMode && aiConfig?.configuredModels?.chat) || activeModel;
+      // Expansion is structured extraction, so it wants the CONFIGURED chat model rather
+      // than a reasoning model whose reasoning can starve `content` ("empty response").
+      // `activeModel` already resolves to Configuration → AI Provider's chat model when
+      // embedded in Splunk, in BOTH agent modes, so there is nothing extra to do here.
+      const expansionModel = activeModel;
       const spec = await expandRequest({
         request: text,
         model: expansionModel,
@@ -2114,12 +2139,71 @@ export function AIChatPanel({
                     </Switch>
                     <Message type="info" style={{ marginTop: 8 }}>
                       {useSplunkAgent
-                        ? 'The assistant runs inside Splunk on the Splunk Agent SDK. Provider, model, API key and temperature all come from the Configuration → AI Provider tab (the model picker below is ignored in this mode). Turn off to use the OpenRouter agent instead.'
-                        : 'Using the OpenRouter agent. Turn on to run the Splunk-native Agent SDK (splunklib.ai) instead.'}
+                        ? 'The agent runs server-side inside Splunk on the Splunk Agent SDK, using the builder tools registered with Splunk. Turn off to run the browser-side agent loop instead (same provider and key, more client-side tools, per-tool approval).'
+                        : 'The agent loop runs in this browser tab, calling the provider directly and executing its tools client-side. Turn on to run the Splunk-native Agent SDK (splunklib.ai) server-side instead.'}
                     </Message>
+                    {embedded && (
+                      <Message type="info" style={{ marginTop: 8 }}>
+                        Either way, provider, model, API key and temperature come from Configuration
+                        → AI Provider. The toggle only changes WHERE the agent loop runs, not which
+                        model it uses.
+                      </Message>
+                    )}
                   </div>
                 )}
-                {aiConfig?.serverManaged ? (
+                {embedded ? (
+                  // Embedded in Splunk: ONE place to configure AI. Show what is in force and
+                  // link to it, rather than repeating provider/key/model controls that would
+                  // silently disagree with the conf.
+                  <div
+                    data-testid="ai-provider-summary"
+                    style={{
+                      marginBottom: 12,
+                      padding: 12,
+                      border: '1px solid rgba(255,255,255,0.12)',
+                      borderRadius: 4,
+                    }}
+                  >
+                    <Heading level={5} style={{ margin: '0 0 8px 0' }}>
+                      AI provider
+                    </Heading>
+                    <p style={{ fontSize: '0.85em', color: '#9b9ea3', margin: '0 0 8px 0' }}>
+                      Configured in this app&apos;s Configuration page and applied to every AI
+                      feature here (chat, Expert Expansion, build-loop fixer, inline completion).
+                    </p>
+                    <div style={{ fontSize: '0.85em', lineHeight: 1.7 }}>
+                      <div>
+                        Chat / agent model: <code>{activeModel || 'not set'}</code>
+                      </div>
+                      {aiConfig?.configuredModels?.build && (
+                        <div>
+                          Build-loop model: <code>{aiConfig.configuredModels.build}</code>
+                        </div>
+                      )}
+                      {aiConfig?.configuredModels?.completion && (
+                        <div>
+                          Inline-completion model:{' '}
+                          <code>{aiConfig.configuredModels.completion}</code>
+                        </div>
+                      )}
+                      <div>
+                        API key: {aiConfig?.serverManaged ? 'configured' : 'NOT configured'}
+                      </div>
+                    </div>
+                    {!aiConfig?.serverManaged && (
+                      <Message type="warning" style={{ marginTop: 8 }}>
+                        No API key is set - the assistant cannot run. Set one in Configuration → AI
+                        Provider.
+                      </Message>
+                    )}
+                    <Button
+                      appearance="default"
+                      style={{ marginTop: 10 }}
+                      onClick={() => window.open(configurationPageUrl(), '_blank')}
+                      label="Open Configuration → AI Provider"
+                    />
+                  </div>
+                ) : aiConfig?.serverManaged ? (
                   <Message type="success" style={{ marginBottom: 12 }}>
                     AI is server-managed - no API key needed.
                   </Message>
@@ -2145,7 +2229,7 @@ export function AIChatPanel({
                   </>
                 )}
 
-                {!splunkMode && (
+                {!splunkMode && !embedded && (
                   <>
                     <ControlGroup
                       label="Model"

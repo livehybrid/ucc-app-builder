@@ -16,6 +16,7 @@ in-Splunk callers - expansion + completion - want a single completion).
 import json
 import os
 import ssl
+import time
 import urllib.error
 import urllib.request
 
@@ -24,12 +25,24 @@ SETTINGS_CONF = APP + "_settings"
 _UCC_REALM = "__REST_CREDENTIAL__#%s#configs/conf-%s" % (APP, SETTINGS_CONF)
 
 DEFAULT_CHAT_MODEL = "anthropic/claude-sonnet-4.6"
+DEFAULT_COMPLETION_MODEL = "anthropic/claude-haiku-4.5"
 _PROVIDER_BASE = {
     "openrouter": "https://openrouter.ai/api/v1",
     "openai": "https://api.openai.com/v1",
     "anthropic": "https://api.anthropic.com/v1",
     "google": "https://generativelanguage.googleapis.com/v1beta/openai",
 }
+
+# Model-picker shaping, mirroring server/services/openrouterModels.ts so the in-Splunk
+# and Node backends hand the SPA the SAME entry shape.
+_PROVIDER_ORDER = ["moonshotai", "anthropic", "openai", "google", "deepseek",
+                   "mistralai", "meta-llama", "qwen", "x-ai"]
+_MIN_CONTEXT = 32000
+_MAX_MODELS = 60
+# {provider: (fetched_at, models)} - the catalog moves slowly and a persistent REST
+# handler is a long-lived process, so an in-process TTL cache is enough.
+_MODELS_CACHE = {}
+_MODELS_TTL = 3600.0
 
 
 def _ca_bundle():
@@ -64,6 +77,16 @@ def provider_and_key(session_key, cfg=None):
     return provider, base, key
 
 
+def float_or_none(value):
+    """Parse a conf string into a float, or None when unset/invalid (so the caller can
+    fall back to its own default rather than sending a bogus temperature)."""
+    try:
+        s = str(value if value is not None else "").strip()
+        return float(s) if s else None
+    except (TypeError, ValueError):
+        return None
+
+
 def ai_config_response(session_key):
     """Reproduce the Node engine's GET /api/ai/config payload from the in-Splunk
     [ai_provider] config. serverManaged is true when a key is configured; configuredModels
@@ -86,6 +109,13 @@ def ai_config_response(session_key):
             "build": (cfg.get("build_model") or "").strip() or None,
             "completion": (cfg.get("completion_model") or "").strip() or None,
         },
+        # Sampling temperatures from the same Configuration tab. Without these the
+        # per-function temperature fields were dead config - the SPA hardcoded its own.
+        "configuredTemperatures": {
+            "chat": float_or_none(cfg.get("temperature")),
+            "build": float_or_none(cfg.get("build_temperature")),
+            "completion": float_or_none(cfg.get("completion_temperature")),
+        },
         "defaultModel": default_model,
         "notes": "AI provider, key and models come from Configuration → AI Provider.",
         "capabilities": {
@@ -105,12 +135,75 @@ def ai_config_response(session_key):
     }
 
 
+def select_tool_calling_models(raw, provider="openrouter"):
+    """Shape a provider's /models payload into picker entries.
+
+    MUST mirror server/services/openrouterModels.ts `selectToolCallingModels` - the SPA
+    reads `label` / `provider` / `contextLength` / `pricing` off each entry, so returning
+    the provider's raw `{id, name}` renders every option as "undefined (undefined)".
+    Pure function so it is unit-testable without the network.
+    """
+    out = []
+    for m in (raw or []):
+        mid = str(m.get("id") or "")
+        if not mid:
+            continue
+        if provider == "openrouter":
+            # Only models that can actually drive a tool-calling agent, with a workable
+            # context window (same gate as the Node engine).
+            if "tools" not in (m.get("supported_parameters") or []):
+                continue
+            try:
+                if int(m.get("context_length") or 0) < _MIN_CONTEXT:
+                    continue
+            except (TypeError, ValueError):
+                continue
+        try:
+            ctx = int(m.get("context_length") or 0)
+        except (TypeError, ValueError):
+            ctx = 0
+        info = {
+            "id": mid,
+            "label": str(m.get("name") or mid),
+            "provider": mid.split("/")[0] if "/" in mid else provider,
+            "contextLength": ctx,
+        }
+        pricing = m.get("pricing") or {}
+        try:
+            prompt = float(pricing.get("prompt") or 0)
+            completion = float(pricing.get("completion") or 0)
+        except (TypeError, ValueError):
+            prompt = completion = 0.0
+        # Only attach pricing when known and non-zero (free models report "0").
+        if prompt > 0 or completion > 0:
+            info["pricing"] = {"prompt": prompt, "completion": completion}
+        out.append(info)
+
+    def _sort_key(info):
+        try:
+            rank = _PROVIDER_ORDER.index(info["provider"])
+        except ValueError:
+            rank = 99
+        return (rank, info["label"].lower())
+
+    out.sort(key=_sort_key)
+    return out[:_MAX_MODELS]
+
+
 def list_models(session_key, provider=None):
-    """List the provider's tool-enabled models for the Settings picker (OpenRouter/OpenAI)."""
+    """List the provider's tool-enabled models for the Settings picker (OpenRouter/OpenAI).
+
+    Cached in-process for an hour: the catalog moves slowly and a persistent REST handler
+    is long-lived, so without this every panel mount made a live 20s-timeout call.
+    """
     cfg = read_ai_provider(session_key)
     prov = str(provider or cfg.get("provider") or "openrouter").lower()
     if prov not in ("openrouter", "openai"):
         return {"ok": True, "provider": prov, "models": [], "dynamic": False}
+    cached = _MODELS_CACHE.get(prov)
+    if cached and (time.time() - cached[0]) < _MODELS_TTL:
+        return {"ok": True, "provider": prov, "models": cached[1], "dynamic": True,
+                "cached": True}
     _p, base, key = provider_and_key(session_key, cfg)
     base = _PROVIDER_BASE.get(prov, base)
     try:
@@ -121,15 +214,9 @@ def list_models(session_key, provider=None):
             data = json.loads(resp.read().decode("utf-8"))
     except Exception as e:  # noqa: BLE001
         return {"ok": False, "error": "model list unavailable: %s" % e, "models": []}
-    models = []
-    for m in (data.get("data") or []):
-        mid = m.get("id")
-        if not mid:
-            continue
-        if prov == "openrouter" and "tools" not in (m.get("supported_parameters") or []):
-            continue
-        models.append({"id": mid, "name": m.get("name") or mid})
-    models.sort(key=lambda x: x["id"])
+    models = select_tool_calling_models(data.get("data") or [], prov)
+    if models:
+        _MODELS_CACHE[prov] = (time.time(), models)
     return {"ok": True, "provider": prov, "models": models, "dynamic": True, "cached": False}
 
 

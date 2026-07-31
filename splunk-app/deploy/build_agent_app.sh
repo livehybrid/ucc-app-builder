@@ -26,9 +26,20 @@ if [ ! -d "$REPO/node_modules" ]; then
 fi
 bash "$HERE/deploy/build_ui.sh"
 
+# Keep the HOST ucc-gen on the latest release. The vendored copy installed further down is
+# unpinned and therefore always latest, so without this the two silently drift: on
+# 2026-07-30 the package was built by host ucc-gen 6.5.2 while shipping ucc-framework 6.5.3
+# to the in-app build engine. Set UCC_SKIP_TOOLCHAIN_UPGRADE=1 to build offline / air-gapped.
+if [ "${UCC_SKIP_TOOLCHAIN_UPGRADE:-0}" = "1" ]; then
+  echo "==> host toolchain upgrade SKIPPED (UCC_SKIP_TOOLCHAIN_UPGRADE=1)"
+else
+  echo "==> upgrading host toolchain to the latest ucc-gen + appinspect"
+  python3 -m pip install --quiet --upgrade splunk-add-on-ucc-framework splunk-appinspect
+fi
+
 # Emit the MCP tool signatures bin/autoregister.py registers from on install, from the
 # single source of truth (deploy/register_mcp_tools.py TOOLS). Build artifact, NOT
-# committed - and it must exist before ucc-gen, which copies appserver/static verbatim.
+# committed — and it must exist before ucc-gen, which copies appserver/static verbatim.
 # Without it autoregister silently no-ops and the app's MCP tools never register.
 echo "==> emit MCP tool signatures -> appserver/static"
 python3 "$HERE/deploy/register_mcp_tools.py" --emit \
@@ -41,7 +52,46 @@ APPLIB="$OUT/ucc_app_builder/lib"
 echo "==> installing agent deps as cp${PYVER//./} manylinux wheels (target runtime: Splunk py3.13)"
 python3 -m pip install --target "$APPLIB" --upgrade --no-compile \
   --python-version "$PYVER" --only-binary=:all: --platform "$PLAT" --implementation cp \
-  langchain langchain-openai langgraph pydantic pydantic-core uuid-utils "mcp>=1.27.0"
+  langchain langchain-openai langgraph pydantic pydantic-core uuid-utils "mcp>=1.27.0,<2"
+
+# GATE: the agent deps above are floor-pinned, so a new MAJOR release upstream lands here
+# silently. Prove the vendored Splunk Agent SDK can still stand its local MCP tool server up
+# BEFORE we ship, by constructing a ToolRegistry exactly as bin/tools.py does. mcp 2.0 removed
+# the `Server.list_tools()` / `Server.call_tool()` decorators the SDK's registry is built on,
+# which made ToolRegistry() raise at construction — the tool subprocess then died instantly and
+# the ONLY user-visible symptom was "MCPError: Connection closed" from the CLIENT's
+# session.initialize(), pointing nowhere near the real cause. A version pin alone would not
+# catch the next incompatibility; constructing the thing does.
+echo "==> verifying the vendored Agent SDK can start its MCP tool server"
+if command -v python3.13 >/dev/null 2>&1; then
+  PYTHONPATH="$APPLIB" python3.13 - <<'PYMCP' || exit 1
+import importlib.metadata as md
+import sys
+try:
+    from splunklib.ai.registry import ToolRegistry
+    r = ToolRegistry()
+
+    @r.tool(name="_buildcheck", tags=["ucc_builder"])
+    def _buildcheck() -> dict:
+        """Build-time smoke tool."""
+        return {"ok": True}
+except Exception as e:
+    print(f"ERROR: the vendored Agent SDK cannot build its MCP tool registry: "
+          f"{type(e).__name__}: {e}", file=sys.stderr)
+    try:
+        print(f"       installed mcp = {md.version('mcp')}", file=sys.stderr)
+    except Exception:
+        pass
+    print("       bin/tools.py would die on spawn and the agent would report only "
+          "'MCPError: Connection closed'.", file=sys.stderr)
+    print("       Check the mcp pin in deploy/build_agent_app.sh + ucc-app/lib/requirements.txt.",
+          file=sys.stderr)
+    sys.exit(1)
+print(f"    ToolRegistry constructs OK against mcp {md.version('mcp')}")
+PYMCP
+else
+  echo "    (skipped: no python3.13 on PATH to import the cp313 wheels)"
+fi
 
 # Native build engine: vendor ucc-framework (ucc-gen build) + AppInspect so the in-Splunk
 # IDE builds + vets add-ons in Splunk's own python (3.13) with NO Node sidecar. AppInspect's
@@ -70,6 +120,23 @@ else
   echo "ERROR: no python3.13 available (neither \$SPLUNK_HOME/bin/python3 nor python3.13 on PATH)." >&2
   echo "       The AppInspect vendoring step needs a real 3.13 interpreter: install one" >&2
   echo "       (e.g. 'uv python install 3.13' or actions/setup-python 3.13) and re-run." >&2
+  exit 1
+fi
+
+# GATE: the HOST ucc-gen (which packaged this app) and the VENDORED ucc-framework (which the
+# in-app build engine runs for the user's add-ons) must be the same release. They are
+# installed by separate pip invocations against different interpreters, so they drift
+# silently - on 2026-07-30 the package shipped 6.5.3 while having been built by 6.5.2.
+# ucc-framework releases DO change behaviour (6.5.3 tightened the meta.name regex), so a
+# split means the app validates add-ons against rules its own package never met.
+HOST_UCC="$(python3 -c 'import splunk_add_on_ucc_framework as u; print(u.__version__)' 2>/dev/null || echo unknown)"
+VEND_UCC="$(PYTHONPATH="$APPLIB" "$BUILDPY" -c 'import splunk_add_on_ucc_framework as u; print(u.__version__)' 2>/dev/null || echo unknown)"
+echo "==> ucc-gen versions: host=$HOST_UCC vendored=$VEND_UCC"
+if [ "$HOST_UCC" != "$VEND_UCC" ]; then
+  echo "ERROR: ucc-framework version split - host ucc-gen $HOST_UCC built a package that ships $VEND_UCC." >&2
+  echo "       Both must be the latest release. Upgrade the host toolchain and re-run:" >&2
+  echo "         python3 -m pip install --upgrade splunk-add-on-ucc-framework splunk-appinspect" >&2
+  echo "       (or set UCC_SKIP_TOOLCHAIN_UPGRADE=1 only if you are deliberately building offline)." >&2
   exit 1
 fi
 

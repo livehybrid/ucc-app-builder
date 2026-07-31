@@ -141,8 +141,35 @@ authors **only**:
 modular-input wrappers, the UCC lib, and the UI from globalConfig — the agent must **not**
 hand-author those (editing them is silently overwritten on the next build). The system
 prompt + the `build_and_inspect` tool description teach the order: author globalConfig →
-provide app.manifest → run `build_and_inspect` (generate boilerplate) → THEN implement the
-collection logic in `package/bin/`.
+**`validate_global_config`** → provide app.manifest → run `build_and_inspect` (generate
+boilerplate) → THEN implement the collection logic in `package/bin/`.
+
+#### globalConfig schema pre-validation (`splunk-app/ucc-app/bin/builder_schema.py`)
+
+`ucc-gen` validates globalConfig with `jsonschema` and surfaces only `best_match()`'s
+message. For `pages.inputs` — a `oneOf` of "one page-level table" vs "a table per service" —
+that message is actively misleading: an unknown property fails **both** branches, so you get
+`'table' is a required property` (or `… should not be valid under {'required': ['table']}`)
+while the real culprit is never named. An LLM then oscillates between adding and removing
+the table until its step budget is gone.
+
+So the build **pre-validates** against the same installed schema and reports every leaf error
+with its JSON path, plus the properties that *are* allowed there:
+
+```
+$.pages.inputs: Additional properties are not allowed ('subTitle' was unexpected).
+  Allowed here: capabilities, description, groupsMenu, …, subDescription, table, title.
+```
+
+It fails fast (no ~15-minute ucc-gen run) and the agent gets two extra tools:
+
+| Tool | Purpose |
+| --- | --- |
+| `validate_global_config` | Schema-check the project's globalConfig in seconds, no build. |
+| `ucc_schema_help(name)` | Return one schema definition (e.g. `InputsPage`) with its `oneOf` branches expanded — the way out of a dead end without guessing. |
+
+The authoritative schema is also served in-Splunk at `/api/ucc/schema`, so the Monaco editor
+validates against what `ucc-gen` really enforces instead of the small bundled subset.
 
 ### The self-correcting loop the agent drives (`server/services/agentLoop.ts`)
 

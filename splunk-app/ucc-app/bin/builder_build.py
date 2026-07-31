@@ -351,6 +351,33 @@ def _blocking_failures(report, include_warnings):
 
 
 # --------------------------------------------------------------------------- orchestrate
+def _prevalidate_global_config(files, on_log):
+    """Schema-check globalConfig.json before ucc-gen. Returns a list of actionable error
+    strings ([] = pass, or the check could not run - never block on our own failure)."""
+    gc = next((f for f in (files or [])
+               if str(f.get("path", "")).replace("\\", "/").split("/")[-1] == "globalConfig.json"),
+              None)
+    if not gc:
+        return []
+    try:
+        import builder_schema
+        res = builder_schema.validate_global_config_text(gc.get("content") or "")
+    except Exception as e:  # noqa: BLE001 - a broken pre-check must never block a build
+        on_log("globalConfig pre-validation skipped: %s" % e)
+        return []
+    if not res.get("checked"):
+        on_log("globalConfig pre-validation skipped: %s" % (res.get("note") or "unavailable"))
+        return []
+    if res.get("ok"):
+        on_log("globalConfig.json passed UCC %s schema validation" % (res.get("uccVersion") or "?"))
+        return []
+    errs = list(res.get("errors") or [])
+    on_log("globalConfig.json FAILED UCC schema validation (%d issue(s))" % len(errs))
+    for e in errs:
+        on_log("  " + e)
+    return errs
+
+
 def build_and_inspect(files, app_id, version="1.0.0", do_package=False, include_warnings=False):
     """Build the project with ucc-gen, run AppInspect, and (optionally) package it.
     Returns a dict mirroring the old sidecar build_engine result:
@@ -360,6 +387,22 @@ def build_and_inspect(files, app_id, version="1.0.0", do_package=False, include_
     def log(line):
         if line is not None and str(line).strip():
             logs.append(str(line))
+
+    # Pre-flight: validate globalConfig.json against the REAL ucc-framework schema before
+    # spending ~15 minutes in ucc-gen. ucc-gen itself only surfaces jsonschema's best_match
+    # string, which for the InputsPage `oneOf` names the wrong property and sends an LLM into
+    # an add-the-table / remove-the-table loop. See builder_schema for the detail.
+    schema_errors = _prevalidate_global_config(files, log)
+    if schema_errors:
+        return {
+            "ok": False,
+            "clean": False,
+            "error": "globalConfig.json failed UCC schema validation",
+            "schemaErrors": schema_errors,
+            "buildError": "\n".join(schema_errors),
+            "trace": logs,
+            "files": files,
+        }
 
     workdir = tempfile.mkdtemp(prefix="ucc_build_")
     try:

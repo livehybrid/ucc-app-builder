@@ -509,6 +509,20 @@ export const buildAndInspect: ServerAgentTool = {
       const incomplete = missingHandlers.length > 0;
 
       const trace = events.map((e) => `  [it${e.iteration}] ${e.kind}: ${e.message}`).join('\n');
+      // A ucc-gen failure carries its real output (the jsonschema message naming the bad
+      // property) in the build_error event's `data.logs`. The one-line trace above reduces
+      // it to "Build failed: ucc-gen build failed with code 1", which is unactionable and
+      // left the agent guessing at globalConfig shape. Surface the actual log tail.
+      const buildErrorLogs = events
+        .filter((e) => e.kind === 'build_error')
+        .flatMap((e) => (Array.isArray(e.data?.logs) ? (e.data.logs as unknown[]) : []))
+        .map((l) => String(l))
+        .filter((l) => l.trim());
+      const buildErrorNote = buildErrorLogs.length
+        ? `\n\n--- ucc-gen build output (fix EXACTLY what this names) ---\n${buildErrorLogs
+            .slice(-20)
+            .join('\n')}`
+        : '';
       const manifestNote = generatedManifest
         ? `\n\n🛠 Generated the REQUIRED package/app.manifest from globalConfig.json metadata ` +
           `(${generatedManifest}) — ucc-gen does not create it, and it was missing.`
@@ -541,7 +555,7 @@ export const buildAndInspect: ServerAgentTool = {
         ? `\n\nThe loop changed ${changed.length} source file(s) in your VFS:\n${changed.map((c) => `  - ${c}`).join('\n')}`
         : '';
       const pkg = result.clean && !incomplete && result.tarball ? `\n\nPackage: ${result.tarball}` : '';
-      return `${header}${manifestNote}${checkForUpdatesNote}${autoStubNote}${cleanButIncompleteHint}${changedNote}\n\n--- loop trace ---\n${trace}\n\n--- final report ---\n${
+      return `${header}${manifestNote}${checkForUpdatesNote}${autoStubNote}${cleanButIncompleteHint}${changedNote}${buildErrorNote}\n\n--- loop trace ---\n${trace}\n\n--- final report ---\n${
         result.finalSummary ?? '(no summary)'
       }${pkg}`;
     } catch (e) {

@@ -14,8 +14,10 @@ import {
   inlineEnabled,
   setInlineEnabled,
   inlineModel,
+  configuredCompletionModel,
   COMPLETION_MODEL_STORAGE,
   COMPLETION_MODEL_CHOICES,
+  FOLLOW_CONFIGURED_MODEL,
 } from '../lib/ai/inlineCompletion';
 import { variables } from '@splunk/themes';
 import type { VirtualFileSystem } from '../lib/vfs';
@@ -194,7 +196,24 @@ export function FileBrowser({
   const [expandedDirs, setExpandedDirs] = useState<Set<string>>(new Set(['/']));
   // Inline (ghost-text) AI completion - opt-in (default OFF), persisted in localStorage.
   const [aiComplete, setAiComplete] = useState<boolean>(() => inlineEnabled());
+  // '' = follow Configuration → AI Provider's `completion_model`; anything else is an
+  // explicit per-browser override. Previously this picker silently outranked the conf even
+  // when the user had never touched it, so the admin's setting appeared to do nothing.
   const [completeModel, setCompleteModel] = useState<string>(() => inlineModel());
+  const [configuredCompletion, setConfiguredCompletion] = useState<string>('');
+  useEffect(() => {
+    let alive = true;
+    configuredCompletionModel()
+      .then((m) => {
+        if (alive) setConfiguredCompletion(m);
+      })
+      .catch(() => {
+        /* leave blank - the option still reads "use configured model" */
+      });
+    return () => {
+      alive = false;
+    };
+  }, []);
   const [editedContent, setEditedContent] = useState<string | null>(null);
   const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false);
   const [contextMenu, setContextMenu] = useState<ContextMenuState>({
@@ -1198,10 +1217,20 @@ export function FileBrowser({
                 /* ignore */
               }
             }}
-            style={{ minWidth: 200 }}
+            style={{ minWidth: 240 }}
+            title="Which model writes the ghost text. Defaults to the app's Configuration → AI Provider setting."
           >
+            <Select.Option
+              key="__configured__"
+              label={
+                configuredCompletion
+                  ? `Configured default (${configuredCompletion})`
+                  : 'Configured default (Configuration → AI Provider)'
+              }
+              value={FOLLOW_CONFIGURED_MODEL}
+            />
             {COMPLETION_MODEL_CHOICES.map((m) => (
-              <Select.Option key={m.id} label={m.label} value={m.id} />
+              <Select.Option key={m.id} label={`Override: ${m.label}`} value={m.id} />
             ))}
           </Select>
         )}

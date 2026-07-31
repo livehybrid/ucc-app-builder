@@ -59,6 +59,32 @@ body {
   opacity: 1;
 }
 
+/* Disabled inputs need their OWN rule. The block above is a 96%-transparent tint that
+   only reads as dark because the ancestor panel is dark, and @splunk/react-ui resolves
+   both interactiveColorBackground and interactiveColorBackgroundDisabled to `transparent`
+   in every theme — so nothing paints an opaque surface. The moment the control is
+   disabled, the host page's disabled-control styling wins and the box goes WHITE, while
+   `color: #e8e8e9 !important` above keeps the text light grey: light-grey text on white.
+   That is what happened to the chat composer for the whole duration of an agent run
+   (and to the Loop panel's spec box during a build). Pin both halves explicitly, at
+   higher specificity than the enabled rule. */
+#root input:disabled,
+#root input[disabled],
+#root textarea:disabled,
+#root textarea[disabled] {
+  background-color: rgba(255, 255, 255, 0.02) !important;
+  /* Dimmed but still legible on the dark surface — this reads as "busy", not "empty". */
+  color: #9b9ea3 !important;
+  border-color: rgba(255, 255, 255, 0.1) !important;
+  -webkit-text-fill-color: #9b9ea3; /* Safari/iOS ignore `color` on disabled controls. */
+  opacity: 1; /* Some UA sheets fade disabled controls to ~0.5 on top of everything else. */
+  cursor: not-allowed;
+}
+#root input:disabled::placeholder,
+#root textarea:disabled::placeholder {
+  color: #6f7276 !important;
+}
+
 /* Monaco editor overrides */
 .monaco-editor .suggest-widget {
   z-index: 10000 !important;

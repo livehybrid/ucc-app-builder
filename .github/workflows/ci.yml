@@ -76,15 +76,15 @@ jobs:
         with:
           python-version: '3.10'
 
-      # Pinned toolchain so this DETERMINISTIC gate is reproducible (a ucc-gen/AppInspect
-      # release can change generated files or check results and flip CLEAN on an unrelated
-      # day). The pin is tracked by Dependabot (pip, .github/dev-requirements.txt), so a new
-      # release arrives as a PR that THIS job validates before it can merge. The other jobs
-      # (splunk-app / splunk-integration / licenses) intentionally float to latest (>=).
-      - name: Install Splunk toolchain (pinned, Dependabot-tracked)
+      # Always the LATEST ucc-gen / AppInspect - the same policy as every other job here.
+      # This gate is otherwise deterministic (no LLM, no network), so a red run after an
+      # upstream release is real signal about that release, not flakiness: read the diff in
+      # the generated output before dismissing it. (--upgrade so a warm pip cache on the
+      # runner cannot hold back an older resolve.)
+      - name: Install Splunk toolchain (latest)
         run: |
           python -m pip install --upgrade pip
-          pip install -r .github/dev-requirements.txt
+          pip install --upgrade -r .github/dev-requirements.txt
 
       - name: Install Node dependencies
         run: npm ci
@@ -125,7 +125,7 @@ jobs:
           python-version: '3.11'
 
       - name: Install UCC + AppInspect
-        run: pip install "splunk-add-on-ucc-framework>=6.5.0" "splunk-appinspect>=4.2.1"
+        run: pip install --upgrade "splunk-add-on-ucc-framework>=6.5.0" "splunk-appinspect>=4.2.1"
 
       # build_agent_app.sh now builds the SPA bundle (it is no longer committed), so the
       # packaging jobs need Node too.
@@ -229,7 +229,7 @@ jobs:
           python-version: '3.11'
 
       - name: Install UCC framework
-        run: pip install "splunk-add-on-ucc-framework>=6.5.0"
+        run: pip install --upgrade "splunk-add-on-ucc-framework>=6.5.0"
 
       # build_agent_app.sh now builds the SPA bundle (no longer committed) → needs Node.
       - name: Setup Node.js
@@ -328,7 +328,7 @@ jobs:
         run: npm ci
 
       - name: Install UCC framework
-        run: pip install "splunk-add-on-ucc-framework>=6.5.0"
+        run: pip install --upgrade "splunk-add-on-ucc-framework>=6.5.0"
 
       - name: Build the native app (to enumerate the Python advisor stack's wheels)
         run: bash splunk-app/deploy/build_agent_app.sh "$RUNNER_TEMP/uccbuild"

@@ -242,8 +242,13 @@ def _build_loop(session_key, body):
     max_iter = int(body.get("maxIterations") or 4)
     include_warnings = bool(body.get("includeWarnings"))
     use_llm = body.get("useLlm", True) and body.get("llmOnly", False) is not True
-    fixer_model = (builder_llm.read_ai_provider(session_key).get("build_model")
-                   or builder_llm.read_ai_provider(session_key).get("model") or None)
+    _ai_cfg = builder_llm.read_ai_provider(session_key)
+    fixer_model = (_ai_cfg.get("build_model") or _ai_cfg.get("model") or None)
+    # Configuration → AI Provider "Build-loop temperature". Was previously dead config:
+    # the fixer hard-coded 0.1 and never read it.
+    fixer_temp = builder_llm.float_or_none(_ai_cfg.get("build_temperature"))
+    if fixer_temp is None:
+        fixer_temp = 0.1
     events = []
     blocks = []
 
@@ -266,11 +271,22 @@ def _build_loop(session_key, body):
             loop_event("build", iteration, "Building + inspecting (iteration %d)" % iteration)
             res = builder_build.build_and_inspect(files, app_id, version=version,
                                                   do_package=False, include_warnings=include_warnings)
+            if res.get("ok") is False:
+                # ucc-gen (or schema pre-validation) failed, so AppInspect never ran and
+                # there is no `report`. Surface the ACTUAL error - previously this fell
+                # through to _llm_fix, which found no `report.checks`, returned None, and
+                # the loop stopped with a bare "No fix produced".
+                detail = res.get("schemaErrors") or (res.get("buildError") or "").splitlines()
+                loop_event("build_error", iteration,
+                           res.get("error") or "Build failed before AppInspect",
+                           {"errors": [d for d in detail if str(d).strip()][:12],
+                            "schema": bool(res.get("schemaErrors"))})
             summary = res.get("summary") or {}
             blocking = res.get("blocking") or []
             adv = res.get("advisories") or {}
-            loop_event("inspect", iteration, "AppInspect: %s" % json.dumps(summary),
-                       {"summary": summary, "blocking": blocking, "advisories": adv})
+            if res.get("ok") is not False:
+                loop_event("inspect", iteration, "AppInspect: %s" % json.dumps(summary),
+                           {"summary": summary, "blocking": blocking, "advisories": adv})
             if res.get("clean"):
                 clean = True
                 # future_failure / warning are advisory - report them but they do NOT fail
@@ -286,7 +302,7 @@ def _build_loop(session_key, body):
                 loop_event("fix_skipped", iteration, "LLM fixing disabled; stopping.")
                 break
             # Ask the configured build model to patch the source for the blocking checks.
-            patched = _llm_fix(session_key, files, app_id, res, fixer_model)
+            patched = _llm_fix(session_key, files, app_id, res, fixer_model, fixer_temp)
             if not patched:
                 loop_event("fix_skipped", iteration, "No fix produced; stopping.")
                 break
@@ -308,10 +324,24 @@ def _build_loop(session_key, body):
             "headers": {"Content-Type": "text/event-stream", "Cache-Control": "no-cache"}}
 
 
-def _llm_fix(session_key, files, app_id, build_result, model):
+def _llm_fix(session_key, files, app_id, build_result, model, temperature=0.1):
     """Single-shot LLM patch: hand the model the blocking checks + current source and ask
     for full-file replacements as JSON {path, content}[]. Returns updated files or None."""
-    blocking = build_result.get("report", {}).get("checks") or []
+    # A build FAILURE has no AppInspect report - the actionable detail is the schema errors
+    # (path-anchored, naming the offending property) or ucc-gen's stderr tail. Feed those in
+    # as synthetic findings so the fixer gets a repair attempt instead of the loop stopping.
+    if build_result.get("ok") is False:
+        detail = build_result.get("schemaErrors") or []
+        if not detail:
+            detail = [ln for ln in (build_result.get("buildError") or "").splitlines()
+                      if ln.strip()][-15:]
+        if not detail:
+            return None
+        blocking = [{"check": "globalConfig_schema" if build_result.get("schemaErrors")
+                     else "ucc_gen_build_error",
+                     "result": "failure", "message": str(d)} for d in detail]
+    else:
+        blocking = build_result.get("report", {}).get("checks") or []
     fails = [c for c in blocking if (c.get("result") or "").lower() in ("failure", "error")][:12]
     if not fails:
         return None
@@ -324,7 +354,7 @@ def _llm_fix(session_key, files, app_id, build_result, model):
         "Return ONLY a JSON array of the files you changed, each {\"path\":..., \"content\": <full new file>}. "
         "Use the SAME paths as above. No prose." % (findings, src))
     text, err = builder_llm.complete_text(session_key, [{"role": "user", "content": prompt}],
-                                          model=model, temperature=0.1, max_tokens=8000)
+                                          model=model, temperature=temperature, max_tokens=8000)
     if err or not text:
         return None
     try:
@@ -372,6 +402,23 @@ class BuilderApiHandler(PersistentServerConnectionApplication):
         if path == "/api/validate" and method == "POST":
             builder_build = _load("builder_build")
             return _json(builder_build.validate_config(_body(req).get("globalConfig") or {}))
+        # The AUTHORITATIVE globalConfig schema from the installed ucc-framework. The editor
+        # falls back to a small bundled subset without this, which greenlights configs
+        # ucc-gen then rejects (it omits the oneOf/additionalProperties constraints).
+        if path == "/api/ucc/schema":
+            builder_schema = _load("builder_schema")
+            schema = builder_schema.load_schema()
+            if schema is None:
+                return _json({"error": "ucc-framework schema not available"}, 404)
+            return _json({"schema": schema, "uccVersion": builder_schema.ucc_version()})
+        # Schema-only globalConfig check (no ucc-gen run) - same validator the build uses.
+        if path == "/api/ucc/validate" and method == "POST":
+            builder_schema = _load("builder_schema")
+            body = _body(req)
+            gc = body.get("globalConfig")
+            if isinstance(gc, str):
+                return _json(builder_schema.validate_global_config_text(gc))
+            return _json(builder_schema.validate_global_config(gc or {}))
 
         # --- build (sync job + poll + download) ---
         if path == "/api/build" and method == "POST":

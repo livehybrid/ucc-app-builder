@@ -8,4 +8,9 @@ langchain-openai>=1.1.13
 langgraph>=1.1.1
 pydantic>=2.13.2
 uuid-utils>=0.14.1
-mcp>=1.27.0
+# CAP AT <2: the vendored Splunk Agent SDK's ToolRegistry (splunklib/ai/registry.py)
+# registers handlers via the mcp 1.x decorators `Server.list_tools()` / `Server.call_tool()`,
+# which mcp 2.0 REMOVED. On 2.x, ToolRegistry() raises AttributeError at construction, so
+# bin/tools.py dies the moment the SDK spawns it and the agent reports the (very indirect)
+# "MCPError: Connection closed" from the client's session.initialize(). Bit us 2026-07-29.
+mcp>=1.27.0,<2

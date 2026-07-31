@@ -68,6 +68,28 @@ def _call(sk, endpoint, body):
         return {"_http_error": e.code, "_body": e.read().decode()[:300]}
 
 
+def _get(sk, endpoint):
+    req = urllib.request.Request(f"{BASE}/services/{APP}/{endpoint}?output_mode=json", method="GET")
+    req.add_header("Authorization", "Splunk " + sk)
+    try:
+        return json.loads(urllib.request.urlopen(req, context=CTX, timeout=60).read())
+    except urllib.error.HTTPError as e:
+        return {"_http_error": e.code, "_body": e.read().decode()[:300]}
+
+
+def _proxy(sk, api_path, body=None):
+    """Call the SPA's native /api handler the way ui_loader.js does (path in `p`)."""
+    url = f"{BASE}/services/{APP}/proxy?p=" + urllib.parse.quote(api_path, safe="")
+    data = json.dumps(body).encode() if body is not None else None
+    req = urllib.request.Request(url, data=data, method="POST" if data else "GET")
+    req.add_header("Authorization", "Splunk " + sk)
+    req.add_header("Content-Type", "application/json")
+    try:
+        return json.loads(urllib.request.urlopen(req, context=CTX, timeout=120).read())
+    except urllib.error.HTTPError as e:
+        return {"_http_error": e.code, "_body": e.read().decode()[:300]}
+
+
 def check(name, cond, detail=""):
     global _passed
     if cond:
@@ -156,9 +178,18 @@ def main():
     # 10) Splunk Agent SDK chat surface (splunklib.ai), deterministic paths only — no LLM:
     #     - agent_start with NO key configured -> 400 "No API key" (proves the endpoint is
     #       wired + the config resolver runs, and that it refuses to spawn without a key).
+    #     CI runs against a fresh container with no key. Against an instance that DOES have
+    #     one (e.g. a dev box), agent_start would spawn a REAL, BILLABLE agent run — so
+    #     cancel it immediately and assert the wiring rather than the refusal. Without this
+    #     the smoke test silently burns LLM credit on every run.
     d = _call(sk, "agent_start", {"prompt": "hello"})
-    check("agent_start without key -> 400", d.get("_http_error") == 400, str(d)[:300])
-    check("agent_start error mentions API key", "API key" in (d.get("_body") or ""), str(d)[:300])
+    if d.get("job_id"):
+        _call(sk, "agent_cancel", {"job_id": d["job_id"]})
+        check("agent_start spawns a job when a key IS configured", bool(d.get("model")), str(d)[:300])
+        print("  NOTE  an API key is configured on this instance; started+cancelled a real job")
+    else:
+        check("agent_start without key -> 400", d.get("_http_error") == 400, str(d)[:300])
+        check("agent_start error mentions API key", "API key" in (d.get("_body") or ""), str(d)[:300])
 
     #     - agent_poll on an unknown job -> 404, running False (never hangs the UI).
     d = _call(sk, "agent_poll", {"job_id": "deadbeef", "cursor": 0})
@@ -212,6 +243,48 @@ def main():
     check("import rejects path traversal -> 400", d.get("_http_error") == 400, str(d)[:200])
     d = _call(sk, "import_installed_app", {"appId": "no_such_app_xyz"})
     check("import unknown app -> 404", d.get("_http_error") == 404, str(d)[:200])
+
+    # 13) Model-choice endpoint backing the Configuration page's singleSelect dropdowns.
+    #     No API key is configured in CI, so it must still answer with the fallback list in
+    #     Splunk EAI shape ({entry: [{name, content:{label}}]}) - an empty or 500 response
+    #     would render the dropdowns unusable.
+    d = _get(sk, "ai_model_choices")
+    entries = d.get("entry") if isinstance(d, dict) else None
+    check("ai_model_choices returns EAI entries", isinstance(entries, list) and len(entries) > 0, str(d)[:300])
+    check("ai_model_choices entries carry name + content.label",
+          all(e.get("name") and isinstance(e.get("content"), dict) and e["content"].get("label")
+              for e in entries), str(entries)[:300])
+
+    # 14) The AUTHORITATIVE ucc-framework globalConfig schema is served in-Splunk, so the
+    #     editor validates against what ucc-gen actually enforces (not the bundled subset).
+    d = _proxy(sk, "/api/ucc/schema")
+    check("ucc schema served", isinstance(d.get("schema"), dict) and d.get("uccVersion"), str(d)[:200])
+    check("ucc schema is the full one (has definitions)",
+          bool((d.get("schema") or {}).get("definitions")), str(list((d.get("schema") or {}).keys()))[:200])
+
+    # 15) Schema pre-validation names the REAL offending property. `subTitle` on pages.inputs
+    #     is the classic case: raw ucc-gen reports "'table' is a required property" from the
+    #     other oneOf branch and sends an LLM into an add/remove-the-table loop.
+    bad = {
+        "meta": {"name": "ta_smoke", "restRoot": "ta_smoke", "version": "1.0.0",
+                 "displayName": "Smoke", "schemaVersion": "0.0.3"},
+        "pages": {"inputs": {
+            "title": "Inputs", "subTitle": "nope", "description": "d",
+            "table": {"header": [{"label": "Name", "field": "name"}], "actions": ["edit", "delete"]},
+            "services": [{"name": "s", "title": "S", "entity": [
+                {"type": "text", "label": "Name", "field": "name", "required": True}]}]}},
+    }
+    d = _proxy(sk, "/api/ucc/validate", {"globalConfig": bad})
+    check("schema pre-validation rejects the bad config", d.get("ok") is False, str(d)[:300])
+    check("schema pre-validation names subTitle",
+          any("subTitle" in e for e in (d.get("errors") or [])), str(d.get("errors"))[:400])
+    check("schema pre-validation lists what IS allowed",
+          any("Allowed here" in e for e in (d.get("errors") or [])), str(d.get("errors"))[:400])
+
+    good = json.loads(json.dumps(bad))
+    del good["pages"]["inputs"]["subTitle"]
+    d = _proxy(sk, "/api/ucc/validate", {"globalConfig": good})
+    check("schema pre-validation accepts the fixed config", d.get("ok") is True, str(d)[:300])
 
     print(f"\nAll {_passed} checks passed.")
 

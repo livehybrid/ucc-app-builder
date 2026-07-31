@@ -187,11 +187,54 @@ def build_and_inspect(ctx: ToolContext, max_iterations: int = 4, include_warning
     # On a build FAILURE, surface ucc-gen's actual error output so the agent can fix the
     # add-on (not just see "build failed with code 1"). buildError is the stderr tail.
     if result.get("ok") is False:
-        return {"clean": False, "error": result.get("error"),
-                "buildError": result.get("buildError"), "trace": result.get("trace")}
+        out = {"clean": False, "error": result.get("error"),
+               "buildError": result.get("buildError"), "trace": result.get("trace")}
+        # Schema failures carry path-anchored, actionable errors - hand them over verbatim
+        # and tell the agent to fix exactly those rather than restructure blindly.
+        if result.get("schemaErrors"):
+            out["schemaErrors"] = result["schemaErrors"]
+            out["hint"] = ("globalConfig.json does not match the UCC schema. Fix EXACTLY the "
+                           "paths listed in schemaErrors - each one names the offending "
+                           "property and what is allowed there. Do NOT restructure anything "
+                           "that was not flagged. Call ucc_schema_help for a definition's "
+                           "full shape if you need it.")
+        return out
     return {"clean": result.get("clean"), "iterations": result.get("iterations"),
             "summary": result.get("summary"), "blocking": result.get("blocking"),
             "trace": result.get("trace")}
+
+
+@registry.tool(name="validate_global_config", tags=["ucc_builder"])
+def validate_global_config(ctx: ToolContext) -> dict:
+    """Check the project's globalConfig.json against the real ucc-framework JSON Schema
+    WITHOUT running a build. Fast (no ucc-gen), and it reports every problem with its JSON
+    path plus the properties that ARE allowed there - unlike ucc-gen, which reports one
+    misleading message for a `oneOf` node. Call this after writing globalConfig.json and
+    before build_and_inspect."""
+    store = _store(ctx)
+    content = store.read(to_safe_project_path(store.app_id(), "globalConfig.json") or "")
+    if content is None:
+        return {"ok": False, "errors": ["globalConfig.json not found in the project"]}
+    try:
+        builder_schema = _load_sibling("builder_schema")
+        res = builder_schema.validate_global_config_text(content)
+    except Exception as e:  # noqa: BLE001
+        return {"ok": True, "checked": False, "note": f"validation unavailable: {e}"}
+    _dbg("validate_global_config", ok=res.get("ok"), n=len(res.get("errors") or []))
+    return res
+
+
+@registry.tool(name="ucc_schema_help", tags=["ucc_builder"])
+def ucc_schema_help(ctx: ToolContext, name: str = "") -> dict:
+    """Return one named definition from the ucc-framework globalConfig JSON Schema (e.g.
+    'InputsPage', 'ConfigurationPage', 'Entity', 'NumberValidator'), with its oneOf/anyOf
+    branches expanded. Call with no name to list every definition. Use this instead of
+    guessing when a schema error is unclear."""
+    try:
+        builder_schema = _load_sibling("builder_schema")
+        return builder_schema.schema_help(name or None)
+    except Exception as e:  # noqa: BLE001
+        return {"ok": False, "error": f"schema help unavailable: {e}"}
 
 
 @registry.tool(name="generate_dashboard", tags=["ucc_builder"])
