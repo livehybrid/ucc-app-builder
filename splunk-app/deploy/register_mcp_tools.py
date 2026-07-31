@@ -6,10 +6,21 @@ registers, but as API-execution tools that proxy to this app's REST endpoints.
 
 Two KV collections in Splunk_MCP_Server must both have the tool:
   - mcp_tools          : the tool definition (name, schema, _meta.execution=api)
-  - mcp_tools_enabled  : { _key: <name>, tool_id, collision_ids: [] }
+  - mcp_tools_enabled  : { _key: <advertised name>, tool_id, collision_ids: [] }
+
+The enabled _key is the name the MCP Server ADVERTISES, not the raw name: the
+server prefixes every tool with _meta.name_prefix (default _meta.external_app_id)
+unless the name already starts with it, then resolves tools/call by that name. Our
+names already start with "ucc_", so name_prefix="ucc" keeps them as-is and avoids
+the "ucc_app_builder_ucc_ping" stutter that tools/call would then reject (-32004).
+
+TOOLS is the single source of truth: `--emit <path>` writes the same definitions to
+the signatures file that the in-app bin/autoregister.py registers from on install,
+so the manual and automatic paths cannot drift.
 
 Usage:  python3 register_mcp_tools.py            # register/enable all tools
         python3 register_mcp_tools.py --remove   # deregister (cleanup)
+        python3 register_mcp_tools.py --emit P   # write signatures JSON to P
 Env: SPLUNK_HOST (default 192.168.0.222), SPLUNK_PASSWORD (admin).
 """
 import json
@@ -21,6 +32,7 @@ import urllib.request
 HOST = os.environ.get("SPLUNK_HOST", "192.168.0.222").strip() or "192.168.0.222"
 PW = os.environ.get("SPLUNK_PASSWORD", "")
 APP = "ucc_app_builder"
+NAME_PREFIX = "ucc"
 BASE = f"https://{HOST}:8089/servicesNS/nobody/Splunk_MCP_Server/storage/collections/data"
 
 # name, method, endpoint, description, properties, required, body($arg$ placeholders
@@ -123,27 +135,52 @@ def _req(method, url, body=None):
         return e.code, e.read().decode()
 
 
+def mcp_name(name, prefix=NAME_PREFIX):
+    """The name the MCP Server advertises, and the mcp_tools_enabled _key it resolves
+    tools/call by. Mirrors Tool._convert_from_new_schema in the MCP Server."""
+    prefix = (prefix or "").strip()
+    if prefix and not name.startswith(prefix + "_"):
+        return f"{prefix}_{name}"
+    return name
+
+
+def tool_doc(name, method, endpoint, desc, props, required, body):
+    tool_id = f"{APP}:{name}"
+    execution = {"type": "api", "method": method, "endpoint": endpoint}
+    if body is not None:
+        execution["body"] = body
+        # Force JSON so the MCP server sends a raw JSON body (not form-encoded);
+        # our REST handler parses req['payload'] as JSON.
+        execution["headers"] = {"Content-Type": "application/json"}
+    return {
+        "_key": tool_id, "tool_id": tool_id, "name": name, "title": name,
+        "description": desc,
+        "inputSchema": {"type": "object", "properties": props, "required": required},
+        "_meta": {"tags": [APP], "execution": execution,
+                  "external_app_id": APP, "name_prefix": NAME_PREFIX,
+                  "required_app": APP},
+    }
+
+
+def emit(path):
+    """Write TOOLS to the signatures file bin/autoregister.py registers from."""
+    docs = [tool_doc(*t) for t in TOOLS]
+    os.makedirs(os.path.dirname(os.path.abspath(path)), exist_ok=True)
+    with open(path, "w") as fh:
+        fh.write(json.dumps(docs, indent=2) + "\n")
+    print(f"  wrote {len(docs)} tool signatures -> {path}")
+
+
 def register():
-    for name, method, endpoint, desc, props, required, body in TOOLS:
-        tool_id = f"{APP}:{name}"
-        execution = {"type": "api", "method": method, "endpoint": endpoint}
-        if body is not None:
-            execution["body"] = body
-            # Force JSON so the MCP server sends a raw JSON body (not form-encoded);
-            # our REST handler parses req['payload'] as JSON.
-            execution["headers"] = {"Content-Type": "application/json"}
-        doc = {
-            "_key": tool_id, "tool_id": tool_id, "name": name, "title": name,
-            "description": desc,
-            "inputSchema": {"type": "object", "properties": props, "required": required},
-            "_meta": {"tags": [APP], "execution": execution,
-                      "external_app_id": APP, "required_app": APP},
-        }
+    for tool in TOOLS:
+        doc = tool_doc(*tool)
+        tool_id = doc["tool_id"]
+        name = mcp_name(doc["name"])
         # Upsert into mcp_tools.
         s, _ = _req("POST", f"{BASE}/mcp_tools/{tool_id}", doc)
         if s >= 400:
             s, _ = _req("POST", f"{BASE}/mcp_tools", doc)
-        # Enable.
+        # Enable under the ADVERTISED name (see module docstring).
         en = {"_key": name, "tool_id": tool_id, "collision_ids": []}
         s2, _ = _req("POST", f"{BASE}/mcp_tools_enabled/{name}", en)
         if s2 >= 400:
@@ -155,11 +192,16 @@ def remove():
     for name, *_ in TOOLS:
         tool_id = f"{APP}:{name}"
         _req("DELETE", f"{BASE}/mcp_tools/{tool_id}")
-        _req("DELETE", f"{BASE}/mcp_tools_enabled/{name}")
+        _req("DELETE", f"{BASE}/mcp_tools_enabled/{mcp_name(name)}")
         print(f"  removed {name}")
 
 
 if __name__ == "__main__":
+    # --emit is offline (build step): no Splunk, no password needed.
+    if "--emit" in sys.argv:
+        emit(sys.argv[sys.argv.index("--emit") + 1])
+        print("done.")
+        sys.exit(0)
     if not PW:
         print("SPLUNK_PASSWORD not set", file=sys.stderr)
         sys.exit(1)

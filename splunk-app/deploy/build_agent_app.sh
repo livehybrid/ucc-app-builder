@@ -26,6 +26,14 @@ if [ ! -d "$REPO/node_modules" ]; then
 fi
 bash "$HERE/deploy/build_ui.sh"
 
+# Emit the MCP tool signatures bin/autoregister.py registers from on install, from the
+# single source of truth (deploy/register_mcp_tools.py TOOLS). Build artifact, NOT
+# committed - and it must exist before ucc-gen, which copies appserver/static verbatim.
+# Without it autoregister silently no-ops and the app's MCP tools never register.
+echo "==> emit MCP tool signatures -> appserver/static"
+python3 "$HERE/deploy/register_mcp_tools.py" --emit \
+  "$HERE/ucc-app/appserver/static/tool_input_payload_signatures.json"
+
 echo "==> ucc-gen build"
 ucc-gen build --source "$HERE/ucc-app" -o "$OUT"
 APPLIB="$OUT/ucc_app_builder/lib"

@@ -64,18 +64,40 @@ def _upsert(sk, collection, key, doc):
     return _post(sk, f"{KV}/{collection}", doc) or 0  # insert new (doc carries _key)
 
 
+def mcp_name(tool):
+    """The name the MCP Server will advertise for this tool, and therefore the
+    _key it looks the tool up by in mcp_tools_enabled on tools/call.
+
+    Mirrors Tool._convert_from_new_schema in the MCP Server: the stored `name` is
+    prefixed with `_meta.name_prefix` (falling back to `_meta.external_app_id`)
+    unless it already carries that prefix. Registering the enabled row under the
+    bare `name` instead makes tools/list advertise a name that tools/call then
+    rejects with -32004 Tool not found.
+    """
+    meta = tool.get("_meta") or {}
+    prefix = meta.get("name_prefix")
+    if not isinstance(prefix, str) or not prefix.strip():
+        prefix = meta.get("external_app_id") or ""
+    prefix = prefix.strip()
+    name = tool.get("name") or ""
+    if prefix and not name.startswith(prefix + "_"):
+        return prefix + "_" + name
+    return name
+
+
 def _register_kv(sk):
     with open(SIG) as fh:
         tools = json.load(fh)
     out = []
     for t in tools:
         tid = t["tool_id"]
+        name = mcp_name(t)
         doc = dict(t)
         doc["_key"] = tid
         s1 = _upsert(sk, "mcp_tools", tid, doc)
-        s2 = _upsert(sk, "mcp_tools_enabled", t["name"],
-                     {"_key": t["name"], "tool_id": tid, "collision_ids": []})
-        out.append({"name": t["name"], "mcp_tools": s1, "enabled": s2})
+        s2 = _upsert(sk, "mcp_tools_enabled", name,
+                     {"_key": name, "tool_id": tid, "collision_ids": []})
+        out.append({"name": name, "mcp_tools": s1, "enabled": s2})
     return out
 
 
