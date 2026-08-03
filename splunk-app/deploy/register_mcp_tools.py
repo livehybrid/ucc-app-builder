@@ -52,7 +52,8 @@ TOOLS = [
      {"path": {"type": "string"}, "content": {"type": "string"}}, ["path", "content"],
      {"path": "$path$", "content": "$content$"}),
     ("ucc_read_file", "POST", "/services/ucc_app_builder/read_file",
-     "Read one project file back.",
+     "Read one project file back by path (globalConfig.json, package/bin/<input>.py, ...). "
+     "The counterpart to ucc_write_file; confined to the same project subtree.",
      {"path": {"type": "string"}}, ["path"],
      {"path": "$path$"}),
     ("ucc_list_project", "GET", "/services/ucc_app_builder/list_project",

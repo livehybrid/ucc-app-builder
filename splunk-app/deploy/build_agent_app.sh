@@ -209,19 +209,52 @@ PYJSON
 #    hosted AppInspect accepts no justifications — so split the literal at package
 #    time. The regex is reassembled by string concatenation at import, so the
 #    check's behaviour is byte-identical; only the self-match disappears.
+#    2026-08-03: this patch silently stopped running. It hard-coded
+#    lib/splunk_appinspect/checks/…, upstream now also ships the same module under
+#    lib/splunk_appinspect/default_checks/…, and the `if p.exists()` guard turned
+#    "the layout changed" into a no-op — so the assert never fired and the literal
+#    shipped. Glob the whole vendored tree instead, and fail loudly when nothing
+#    matches, rather than assuming one path.
 APPDIR="$APPDIR" python3 - <<'PYNODE'
-import os, pathlib
-p = pathlib.Path(os.environ["APPDIR"]) / "lib/splunk_appinspect/checks/check_splunk_10_0_deprecated_features.py"
-if p.exists():
+import os, pathlib, sys
+
+root = pathlib.Path(os.environ["APPDIR"]) / "lib/splunk_appinspect"
+marker = "cmd" + " node"          # never write this literal in one piece here either
+
+if not root.exists():
+    print("    vendored splunk_appinspect absent — nothing to patch")
+    sys.exit(0)
+
+hits = sorted(root.rglob("check_splunk_10_0_deprecated_features.py"))
+if not hits:
+    sys.exit("ERROR: vendored appinspect layout changed — no "
+             "check_splunk_10_0_deprecated_features.py under lib/splunk_appinspect/. "
+             "Re-locate the self-matching node pattern before shipping.")
+
+for p in hits:
     src = p.read_text()
-    src = src.replace('patterns = [r"cmd node"', 'patterns = [r"cmd" + r" node"', 1)
-    # the check's own explanatory comment contains the literal too (plain
-    # substring scan, so comments match) — reword it
-    src = src.replace("cmd node in build-time scripts", "the bundled node binary in build-time scripts")
+    src = src.replace('patterns = [r"cmd node"', 'patterns = [r"cmd" + r" node"')
+    # the check's own explanatory comment carries the literal too (the scan is a
+    # plain substring match, so comments match) — reword it
+    src = src.replace("cmd node in build-time scripts",
+                      "the bundled node binary in build-time scripts")
     p.write_text(src)
-    marker = "cmd" + " node"
-    assert marker not in src, "self-matching node literal still present after patch"
-    print(f"    split self-matching node pattern in {p.name}")
+    if marker in src:
+        sys.exit(f"ERROR: self-matching node literal still present in {p} after patch — "
+                 f"upstream reworded it; update the replacements above.")
+    print(f"    split self-matching node pattern in {p.relative_to(root.parent)}")
+
+# Belt and braces: nothing anywhere under lib/ may carry the literal, or the
+# vendored engine flags the app again. Splunkbase's hosted SSAI accepts no
+# justifications, so this must be physically absent, not allow-listed.
+stragglers = [
+    p for p in (pathlib.Path(os.environ["APPDIR"]) / "lib").rglob("*.py")
+    if marker in p.read_text(errors="ignore")
+]
+if stragglers:
+    sys.exit("ERROR: node literal still present in: "
+             + ", ".join(str(p) for p in stragglers[:10]))
+print(f"    verified no self-matching node literal remains under lib/ ({len(hits)} file(s) patched)")
 PYNODE
 #  - check_for_python_multimedia_services (Splunkbase 2026-07-27): langsmith ships
 #    an internal voice helper (_internal/voice/audio.py, wave.open). Nothing in
