@@ -200,7 +200,7 @@ jobs:
           name: ucc_app_builder-splunk-app
           path: scan
       - name: Splunk AppInspect (official action, cloud cert)
-        uses: splunk/appinspect-cli-action@v2.13.0
+        uses: splunk/appinspect-cli-action@v2.15.0
         with:
           app_path: scan/
           included_tags: cloud
