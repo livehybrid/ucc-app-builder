@@ -25,12 +25,7 @@ export interface SourcetypeTestSpec {
    * events. Defaults to "modinput" (UCC/AOB modular inputs).
    */
   inputType?:
-    | 'modinput'
-    | 'scripted_input'
-    | 'file_monitor'
-    | 'uf_file_monitor'
-    | 'syslog_tcp'
-    | 'default';
+    'modinput' | 'scripted_input' | 'file_monitor' | 'uf_file_monitor' | 'syslog_tcp' | 'default';
   /** CIM data model(s) this sourcetype should comply with (documented in the README). */
   cimDataModels?: string[];
   /**

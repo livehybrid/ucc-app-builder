@@ -11,11 +11,7 @@
 export type AgentRole = 'planner' | 'executor' | 'router';
 
 export type ModelProfileName =
-  | 'kimi-single'
-  | 'anthropic-multi'
-  | 'openai-multi'
-  | 'local-ollama'
-  | 'custom';
+  'kimi-single' | 'anthropic-multi' | 'openai-multi' | 'local-ollama' | 'custom';
 
 export interface ModelProfile {
   name: ModelProfileName;

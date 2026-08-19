@@ -14,15 +14,7 @@
 // ---------------------------------------------------------------------------------------
 
 export type VizType =
-  | 'line'
-  | 'area'
-  | 'column'
-  | 'bar'
-  | 'table'
-  | 'single'
-  | 'pie'
-  | 'scatter'
-  | 'map';
+  'line' | 'area' | 'column' | 'bar' | 'table' | 'single' | 'pie' | 'scatter' | 'map';
 
 export interface DashboardPanel {
   title: string;
@@ -159,12 +151,7 @@ export interface SavedSearchSpec {
   alert?: {
     /** number of results threshold, e.g. "greater than 0" */
     condition?:
-      | 'greater than'
-      | 'less than'
-      | 'equal to'
-      | 'not equal to'
-      | 'rises by'
-      | 'drops by';
+      'greater than' | 'less than' | 'equal to' | 'not equal to' | 'rises by' | 'drops by';
     threshold?: number;
     /** custom alert condition SPL (overrides condition/threshold when set) */
     conditionSearch?: string;
