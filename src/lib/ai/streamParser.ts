@@ -80,7 +80,7 @@ export async function* parseStream(response: Response): AsyncGenerator<StreamEve
                 };
               }
             }
-          } catch (e: unknown) {
+          } catch {
             // console.warn('Failed to parse SSE chunk:', trimmed);
           }
         }

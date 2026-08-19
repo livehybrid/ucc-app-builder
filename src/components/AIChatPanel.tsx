@@ -763,7 +763,7 @@ export function AIChatPanel({
         if (appId) {
           setCurrentAppId(appId);
         }
-      } catch (e) {
+      } catch {
         // Ignore parse errors
       }
     }
@@ -1074,7 +1074,7 @@ export function AIChatPanel({
 
         system += summary;
         system += `\n**CRITICAL INSTRUCTION:**\nBefore suggesting NEW inputs or alerts, you MUST check the list above.\n- If a similar component exists, ASK the user: "I see an existing input '${config.pages.inputs.services[0]?.name}'. Should I use that one or create a new one?"\n- DO NOT blindly create new inputs if one might already exist.\n- If you create a new input, use a unique name that doesn't conflict.`;
-      } catch (e) {
+      } catch {
         // Fallback if parse fails
       }
 
