@@ -95,7 +95,9 @@ export function OAuthWizard({ open, onClose, onSave, initialConfig }: OAuthWizar
                 <label>Account Label</label>
                 <Text
                   value={config.label}
-                  onChange={(_e, { value }) => setConfig({ ...config, label: value })}
+                  onChange={(_e: unknown, { value }: { value: string | number | boolean }) =>
+                    setConfig({ ...config, label: String(value) })
+                  }
                   placeholder="e.g. Production Account"
                 />
               </FormRow>
@@ -103,8 +105,11 @@ export function OAuthWizard({ open, onClose, onSave, initialConfig }: OAuthWizar
                 <label>Auth Method</label>
                 <Select
                   value={config.authType}
-                  onChange={(_e, { value }) =>
-                    setConfig({ ...config, authType: value as OAuthConfiguration['authType'] })
+                  onChange={(_e: unknown, { value }: { value: string | number | boolean }) =>
+                    setConfig({
+                      ...config,
+                      authType: String(value) as OAuthConfiguration['authType'],
+                    })
                   }
                 >
                   <Select.Option label="OAuth 2.0 (Authorization Code)" value="oauth2" />
@@ -128,21 +133,27 @@ export function OAuthWizard({ open, onClose, onSave, initialConfig }: OAuthWizar
                 <label>Client ID Field Name</label>
                 <Text
                   value={config.clientId || 'client_id'}
-                  onChange={(_e, { value }) => setConfig({ ...config, clientId: value })}
+                  onChange={(_e: unknown, { value }: { value: string | number | boolean }) =>
+                    setConfig({ ...config, clientId: String(value) })
+                  }
                 />
               </FormRow>
               <FormRow>
                 <label>Client Secret Field Name</label>
                 <Text
                   value={config.clientSecret || 'client_secret'}
-                  onChange={(_e, { value }) => setConfig({ ...config, clientSecret: value })}
+                  onChange={(_e: unknown, { value }: { value: string | number | boolean }) =>
+                    setConfig({ ...config, clientSecret: String(value) })
+                  }
                 />
               </FormRow>
               <FormRow>
                 <label>Authorization URL</label>
                 <Text
                   value={config.authUrl}
-                  onChange={(_e, { value }) => setConfig({ ...config, authUrl: value })}
+                  onChange={(_e: unknown, { value }: { value: string | number | boolean }) =>
+                    setConfig({ ...config, authUrl: String(value) })
+                  }
                   placeholder="https://api.example.com/oauth/authorize"
                 />
               </FormRow>
@@ -150,7 +161,9 @@ export function OAuthWizard({ open, onClose, onSave, initialConfig }: OAuthWizar
                 <label>Token URL</label>
                 <Text
                   value={config.tokenUrl}
-                  onChange={(_e, { value }) => setConfig({ ...config, tokenUrl: value })}
+                  onChange={(_e: unknown, { value }: { value: string | number | boolean }) =>
+                    setConfig({ ...config, tokenUrl: String(value) })
+                  }
                   placeholder="https://api.example.com/oauth/token"
                 />
               </FormRow>
@@ -158,7 +171,9 @@ export function OAuthWizard({ open, onClose, onSave, initialConfig }: OAuthWizar
                 <label>Redirect URI (Callback)</label>
                 <Text
                   value={config.redirectUri}
-                  onChange={(_e, { value }) => setConfig({ ...config, redirectUri: value })}
+                  onChange={(_e: unknown, { value }: { value: string | number | boolean }) =>
+                    setConfig({ ...config, redirectUri: String(value) })
+                  }
                 />
               </FormRow>
             </>
