@@ -13,4 +13,4 @@
 #
 # The floors below are compatibility minimums (Splunk 10 / ucc-gen 6.5), not pins.
 splunk-add-on-ucc-framework>=6.5.0
-splunk-appinspect>=4.3.0
+splunk-appinspect>=4.3.1
