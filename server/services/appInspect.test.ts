@@ -76,6 +76,29 @@ describe('AppInspectService policy', () => {
     expect(svc.actionableChecks(authorSource, true).map((c) => c.check)).toEqual(['check_for_supported_tls']);
   });
 
+  it('ignores the Mako-template warning only when it fires on ucc-gen\'s own base.html / redirect.html', () => {
+    const mako = (...files: string[]) =>
+      report([
+        {
+          check: 'check_for_custom_mako_templates',
+          result: 'warning',
+          message: 'mako',
+          messages: files.map((f) => ({ message: 'mako', message_filename: f })),
+        },
+      ]);
+    expect(svc.actionableChecks(mako('appserver/templates/base.html'), true)).toHaveLength(0);
+    expect(svc.actionableChecks(mako('TA_x/appserver/templates/redirect.html'), true)).toHaveLength(0);
+    // An author's own template, alone or alongside the managed one, stays actionable.
+    for (const r of [
+      mako('appserver/templates/custom.html'),
+      mako('appserver/templates/base.html', 'appserver/templates/custom.html'),
+      mako('appserver/modules/thing/base.html'),
+      mako('appserver/templates/base.html.bak.html'),
+    ]) {
+      expect(svc.actionableChecks(r, true).map((c) => c.check)).toEqual(['check_for_custom_mako_templates']);
+    }
+  });
+
   it('summarise lists actionable checks with file/line context', () => {
     const r = report([
       {

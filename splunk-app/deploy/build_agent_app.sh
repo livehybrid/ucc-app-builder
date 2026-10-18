@@ -262,6 +262,23 @@ PYNODE
 #    whose third-party deps are not vendored — and the advisor stack never uses
 #    voice. Drop the whole voice package so the scanner bait is gone.
 rm -rf "$APPDIR/lib/langsmith/_internal/voice"
+#    2026-10: openai 3.x does the same with openai/helpers (Microphone uses
+#    wave.open; LocalAudioPlayer). It is the optional `voice_helpers` extra
+#    (needs numpy + sounddevice, neither vendored): openai core and
+#    langchain-openai never import it. Drop it too.
+rm -rf "$APPDIR/lib/openai/helpers"
+#    Removing a package something still imports would only surface at runtime,
+#    so fail the build if any vendored file still references either one.
+APPDIR="$APPDIR" python3 - <<'PYVOICE'
+import os, pathlib, re, sys
+lib = pathlib.Path(os.environ["APPDIR"]) / "lib"
+pat = re.compile(r"(from|import)\s+(openai\.helpers|langsmith\._internal\.voice)\b"
+                 r"|from\s+openai\s+import\s+[^\n]*\b(Microphone|LocalAudioPlayer)\b")
+users = [str(p.relative_to(lib)) for p in lib.rglob("*.py") if pat.search(p.read_text(errors="ignore"))]
+if users:
+    sys.exit("ERROR: removed voice helpers are still imported by: " + ", ".join(users[:10]))
+print("    verified nothing imports the removed openai/langsmith voice helpers")
+PYVOICE
 #  - check_for_compiled_python: strip __pycache__ / *.pyc from the WHOLE package (wheels in
 #    lib/, AND any bin/ bytecode left by local py_compile checks — AppInspect fails on either).
 find "$APPDIR" -type d -name '__pycache__' -prune -exec rm -rf {} + 2>/dev/null || true
