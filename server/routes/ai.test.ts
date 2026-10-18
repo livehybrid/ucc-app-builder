@@ -97,7 +97,7 @@ function httpGet(url: string): Promise<{ status: number; body: string }> {
 
 import type { AgentRunOptions, AgentEvent } from '../services/agentRunner.js';
 
-const runAgentMock = vi.fn<[AgentRunOptions], Promise<unknown>>();
+const runAgentMock = vi.fn<(opts: AgentRunOptions) => Promise<unknown>>();
 
 vi.mock('../services/agentRunner.js', async (orig) => {
   const actual = (await orig()) as Record<string, unknown>;

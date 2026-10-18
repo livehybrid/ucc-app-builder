@@ -316,7 +316,7 @@ action and (where it makes sense) as a **Splunk MCP Server tool** any external a
 
 ## Setup
 
-Prerequisites: **Node 20+**, **Python 3.10+**, and the Splunk developer tools on `PATH`:
+Prerequisites: **Node 22.12+**, **Python 3.10+**, and the Splunk developer tools on `PATH`:
 
 ```bash
 pip install splunk-add-on-ucc-framework   # provides ucc-gen (tested: 6.5.1; native app vendors it)
