@@ -224,11 +224,19 @@ export class AppInspectService {
     'check_for_possible_threading', // subprocess/threading advisory (fires on lib/solnlib)
     'check_for_supported_tls', // TLS-verification advisory (fires on lib/solnlib/rest.py)
     'check_hostnames_and_ips', // IPs inside vendored lib/ dist-info + ucc-gen JS bundle
+    // AppInspect 4.3.x warns on EVERY .html under appserver/templates. ucc-gen (6.3+)
+    // renders and migrates its own base.html / redirect.html there on each build, so
+    // the author cannot remove them; any OTHER template is the author's and stays actionable.
+    'check_for_custom_mako_templates',
   ]);
 
-  /** Paths the add-on author does not own: vendored deps + ucc-gen-emitted JS bundle. */
+  /** Paths the add-on author does not own: vendored deps, the ucc-gen JS bundle and ucc-gen's managed templates. */
   private static isGeneratedOrVendoredPath(f: string): boolean {
-    return /(^|\/)lib\//.test(f) || /appserver\/static\/js\/build\//.test(f);
+    return (
+      /(^|\/)lib\//.test(f) ||
+      /appserver\/static\/js\/build\//.test(f) ||
+      /(^|\/)appserver\/templates\/(base|redirect)\.html$/.test(f)
+    );
   }
 
   /** True if every message location for a check is generated/vendored (not author source). */

@@ -261,7 +261,39 @@ PYNODE
 #    langsmith core imports it — only optional integrations (pipecat/livekit/…)
 #    whose third-party deps are not vendored — and the advisor stack never uses
 #    voice. Drop the whole voice package so the scanner bait is gone.
-rm -rf "$APPDIR/lib/langsmith/_internal/voice"
+#    2026-10: openai 3.x does the same with openai/helpers (Microphone uses
+#    wave.open; LocalAudioPlayer). It is the optional `voice_helpers` extra
+#    (needs numpy + sounddevice, neither vendored): openai core and
+#    langchain-openai never import it. Drop it too, together with the langsmith
+#    realtime-voice integrations (livekit, pipecat, gemini_live, …) that exist
+#    only to wrap the voice package: they already failed on import once it was
+#    removed, and nothing outside them imports them.
+#    Removing a module something still imports would only surface at runtime,
+#    so the build fails if any vendored file still imports a removed one.
+APPDIR="$APPDIR" python3 - <<'PYVOICE'
+import os, pathlib, re, shutil, sys
+lib = pathlib.Path(os.environ["APPDIR"]) / "lib"
+mods = ["langsmith._internal.voice", "openai.helpers"]
+voice = re.compile(r"\blangsmith\._internal\.voice\b|from\s+(\.\.)+_internal\.voice\b")
+integ = lib / "langsmith" / "integrations"
+if integ.is_dir():
+    for d in sorted(p for p in integ.iterdir() if p.is_dir()):
+        if any(voice.search(f.read_text(errors="ignore")) for f in d.rglob("*.py")):
+            mods.append("langsmith.integrations." + d.name)
+for m in mods:
+    shutil.rmtree(lib.joinpath(*m.split(".")), ignore_errors=True)
+print("    removed voice-only modules: " + ", ".join(mods))
+names = "|".join(re.escape(m) for m in mods)
+parents = "|".join(re.escape(m.rsplit(".", 1)[0]) + r"\s+import\s+[^\n]*\b" + re.escape(m.rsplit(".", 1)[1]) + r"\b"
+                   for m in mods)
+pat = re.compile(r"(?m)^\s*(from|import)\s+(" + names + r")\b"
+                 r"|^\s*from\s+(" + parents + r")"
+                 r"|from\s+openai\s+import\s+[^\n]*\b(Microphone|LocalAudioPlayer)\b")
+users = [str(p.relative_to(lib)) for p in lib.rglob("*.py") if pat.search(p.read_text(errors="ignore"))]
+if users:
+    sys.exit("ERROR: removed voice-only modules are still imported by: " + ", ".join(users[:10]))
+print("    verified nothing vendored imports a removed voice-only module")
+PYVOICE
 #  - check_for_compiled_python: strip __pycache__ / *.pyc from the WHOLE package (wheels in
 #    lib/, AND any bin/ bytecode left by local py_compile checks — AppInspect fails on either).
 find "$APPDIR" -type d -name '__pycache__' -prune -exec rm -rf {} + 2>/dev/null || true
