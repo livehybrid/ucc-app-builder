@@ -138,7 +138,7 @@ MCP-and-Agent-SDK surface. One `server/mcp/core.ts` engine backs both.
 
 ## Toolchain / models
 
-- `ucc-gen` 6.5, `splunk-appinspect` 4.2.1, Node 20, Splunk Enterprise 10.4 (CPython 3.13).
+- `ucc-gen` 6.5, `splunk-appinspect` 4.2.1, Node 22, Splunk Enterprise 10.4 (CPython 3.13).
 - Splunk Agent SDK = `splunklib.ai` (splunk-sdk 3.0, **vendored** — not on public PyPI);
   compiled agent deps installed as cp313 manylinux wheels (`splunk-app/deploy/build_agent_app.sh`).
 - LLM: Claude (default `anthropic/claude-sonnet-4.6`) via **OpenRouter**, provider-agnostic.
