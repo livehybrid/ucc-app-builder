@@ -60,6 +60,59 @@ jobs:
           path: dist/
           retention-days: 7
 
+  # Build the production image and prove it starts: the runtime Node major is
+  # at least the one CI tests on (22), the API answers /api/health and the
+  # bundled ucc-gen toolchain runs. docker-publish.yml only runs on main, so
+  # without this a broken Dockerfile is first seen after merge.
+  docker-smoke:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          submodules: true
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Build image (linux/amd64, not pushed)
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          load: true
+          push: false
+          tags: ucc-app-builder:ci
+          cache-from: type=gha
+          platforms: linux/amd64
+
+      - name: Runtime Node major is at least 22
+        run: |
+          v="$(docker run --rm ucc-app-builder:ci node -p 'process.versions.node')"
+          echo "Image Node: ${v}"
+          [ "${v%%.*}" -ge 22 ] || { echo "Image runs Node ${v}; CI and vitest need 22+" >&2; exit 1; }
+
+      - name: ucc-gen runs in the image
+        run: docker run --rm ucc-app-builder:ci ucc-gen --help >/dev/null
+
+      - name: Container starts and answers /api/health
+        run: |
+          docker run -d --name ucc-smoke -p 3001:3001 ucc-app-builder:ci
+          for i in $(seq 1 30); do
+            body="$(curl -fsS http://127.0.0.1:3001/api/health 2>/dev/null || true)"
+            if echo "${body}" | grep -q '"status":"ok"'; then
+              echo "healthy: ${body}"
+              exit 0
+            fi
+            sleep 2
+          done
+          echo "container never answered /api/health" >&2
+          docker logs ucc-smoke >&2 || true
+          exit 1
+
+      - name: Remove smoke container
+        if: always()
+        run: docker rm -f ucc-smoke || true
+
   # The keystone: prove the agentic loop reaches AppInspect-CLEAN end-to-end on the
   # real toolchain (ucc-gen + splunk-appinspect), deterministically and with NO LLM /
   # network. Runs both a config-only add-on and the input-bearing add-on (the §1 fix).
