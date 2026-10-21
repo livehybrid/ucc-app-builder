@@ -152,6 +152,30 @@ echo "==> pinning urllib3<2 (pure-python; 3.9 persistent-handler compatibility)"
 rm -rf "$APPLIB/urllib3" "$APPLIB"/urllib3-*.dist-info
 python3 -m pip install --target "$APPLIB" --no-compile "urllib3<2"
 
+# certifi is pulled in transitively by several of the pip runs above, so the version
+# that lands depends on install order and the day's PyPI. 2026.10.18 removed CA roots
+# that the agent's outbound TLS still needs (fixed in 2026.10.19), so pin the floor
+# explicitly, wipe any earlier copy (pip --target leaves old dist-info behind) and
+# then prove what was actually vendored by reading the module itself.
+CERTIFI_FLOOR="${CERTIFI_FLOOR:-2026.10.19}"
+echo "==> pinning certifi>=$CERTIFI_FLOOR"
+rm -r "$APPLIB/certifi" "$APPLIB"/certifi-*.dist-info 2>/dev/null || true
+python3 -m pip install --target "$APPLIB" --no-compile "certifi>=$CERTIFI_FLOOR"
+python3 - "$APPLIB" "$CERTIFI_FLOOR" <<'PYCERT' || exit 1
+import pathlib, re, sys
+lib, floor = pathlib.Path(sys.argv[1]), sys.argv[2]
+text = (lib / "certifi" / "__init__.py").read_text()
+m = re.search(r'__version__\s*=\s*["\']([0-9.]+)["\']', text)
+got = m.group(1) if m else "unknown"
+infos = sorted(p.name for p in lib.glob("certifi-*.dist-info"))
+key = lambda v: tuple(int(x) for x in v.split("."))
+if got == "unknown" or key(got) < key(floor) or len(infos) != 1:
+    print(f"ERROR: vendored certifi is {got} (dist-info: {infos}); need exactly one, >= {floor}",
+          file=sys.stderr)
+    sys.exit(1)
+print(f"    vendored certifi {got} (>= {floor})")
+PYCERT
+
 # AppInspect hygiene on the vendored agent stack (so the build is as cert-clean as a
 # compiled-dependency app can be — only check_aarch64_compatibility remains, inherent to
 # shipping x86_64 wheels for the Splunk Agent SDK stack):

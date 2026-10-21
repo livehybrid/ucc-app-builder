@@ -1,5 +1,5 @@
 # ---- Stage 1: Build ----
-FROM node:20-alpine AS builder
+FROM node:22-alpine AS builder
 
 WORKDIR /app
 
@@ -13,7 +13,7 @@ RUN npm run build
 RUN npm run build:server
 
 # ---- Stage 2: Runtime ----
-FROM node:20-alpine AS runtime
+FROM node:22-alpine AS runtime
 
 # Install Python 3 + pip for ucc-gen
 RUN apk add --no-cache python3 py3-pip && \
@@ -28,8 +28,9 @@ RUN npm ci --omit=dev
 # Copy built frontend
 COPY --from=builder /app/dist ./dist
 
-# Copy built server
+# Copy built server (tsc keeps the repo layout: the entry is dist-server/server/index.js)
 COPY --from=builder /app/dist-server ./dist-server
+COPY server/esm-resolve.mjs server/esm-resolve-hooks.mjs ./dist-server/
 
 # Copy vendor specs (needed at runtime for conf validation)
 COPY vendor ./vendor
@@ -43,4 +44,4 @@ EXPOSE 3001
 HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \
   CMD wget -qO- http://localhost:3001/api/health || exit 1
 
-CMD ["node", "dist-server/index.js"]
+CMD ["node", "--import", "./dist-server/esm-resolve.mjs", "dist-server/server/index.js"]
