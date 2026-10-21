@@ -28,8 +28,9 @@ RUN npm ci --omit=dev
 # Copy built frontend
 COPY --from=builder /app/dist ./dist
 
-# Copy built server
+# Copy built server (tsc keeps the repo layout: the entry is dist-server/server/index.js)
 COPY --from=builder /app/dist-server ./dist-server
+COPY server/esm-resolve.mjs server/esm-resolve-hooks.mjs ./dist-server/
 
 # Copy vendor specs (needed at runtime for conf validation)
 COPY vendor ./vendor
@@ -43,4 +44,4 @@ EXPOSE 3001
 HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \
   CMD wget -qO- http://localhost:3001/api/health || exit 1
 
-CMD ["node", "dist-server/index.js"]
+CMD ["node", "--import", "./dist-server/esm-resolve.mjs", "dist-server/server/index.js"]

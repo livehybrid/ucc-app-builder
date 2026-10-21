@@ -11,7 +11,7 @@
     "build": "tsc -b && vite build",
     "build:server": "tsc -p server/tsconfig.json && mkdir -p dist-server/server/services && (cp server/services/*.py dist-server/server/services/ 2>/dev/null || true)",
     "preview": "vite preview",
-    "start:server": "node dist-server/index.js",
+    "start:server": "node --import ./server/esm-resolve.mjs dist-server/server/index.js",
     "test": "vitest",
     "test:run": "vitest run",
     "test:coverage": "vitest run --coverage",
