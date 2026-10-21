@@ -14,3 +14,5 @@ uuid-utils>=0.14.1
 # bin/tools.py dies the moment the SDK spawns it and the agent reports the (very indirect)
 # "MCPError: Connection closed" from the client's session.initialize(). Bit us 2026-07-29.
 mcp>=1.27.0,<2
+# 2026.10.18 dropped CA roots still in use; build_agent_app.sh gates the vendored copy.
+certifi>=2026.10.19
