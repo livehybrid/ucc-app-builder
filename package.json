@@ -38,7 +38,9 @@
     "@splunk/react-icons": "^5.16.0",
     "@splunk/react-ui": "^5.17.0",
     "@splunk/themes": "^1.4.1",
+    "cors": "^2.8.5",
     "dotenv": "^17.4.2",
+    "express": "^4.19.2",
     "flexsearch": "^0.8.212",
     "jszip": "^3.10.2",
     "react": "^18.3.1",
@@ -46,6 +48,7 @@
     "react-markdown": "^9.0.0",
     "remark-gfm": "^4.0.1",
     "styled-components": "^5.3.11",
+    "uuid": "^9.0.1",
     "zod": "^3.25.76"
   },
   "devDependencies": {
@@ -63,17 +66,14 @@
     "@vitejs/plugin-react": "^4.7.0",
     "@vitest/coverage-v8": "^5.0.5",
     "concurrently": "^8.2.2",
-    "cors": "^2.8.5",
     "eslint": "^8.57.0",
     "eslint-plugin-react-hooks": "^4.6.2",
     "eslint-plugin-react-refresh": "^0.4.6",
-    "express": "^4.19.2",
     "jsdom": "^24.0.0",
     "playwright": "^1.47.0",
     "prettier": "^3.9.10",
     "tsx": "^4.23.15",
     "typescript": "^5.4.5",
-    "uuid": "^9.0.1",
     "vite": "^7.3.7",
     "vitest": "^5.0.5"
   }
