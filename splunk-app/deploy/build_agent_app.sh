@@ -160,7 +160,7 @@ python3 -m pip install --target "$APPLIB" --no-compile "urllib3<2"
 CERTIFI_FLOOR="${CERTIFI_FLOOR:-2026.10.19}"
 echo "==> pinning certifi>=$CERTIFI_FLOOR"
 rm -r "$APPLIB/certifi" "$APPLIB"/certifi-*.dist-info 2>/dev/null || true
-python3 -m pip install --target "$APPLIB" --no-compile "certifi==2026.10.18"
+python3 -m pip install --target "$APPLIB" --no-compile "certifi>=$CERTIFI_FLOOR"
 python3 - "$APPLIB" "$CERTIFI_FLOOR" <<'PYCERT' || exit 1
 import pathlib, re, sys
 lib, floor = pathlib.Path(sys.argv[1]), sys.argv[2]
