@@ -186,7 +186,10 @@ The fixers are **grounded in real ucc-gen semantics**: e.g. `check_for_updates_d
 → set `meta.checkForUpdates=false` in `globalConfig.json` (editing the generated `app.conf`
 is silently overwritten on the next build); missing `pages.inputs.table` → synthesise it
 from the service's entities; **missing `package/app.manifest`** → generate it from
-globalConfig metadata; `check_aarch64_compatibility` → pin `solnlib<8`. A **build-error
+globalConfig metadata; `check_aarch64_compatibility` → pin `solnlib<8`; the
+`check_*_python_required` family (failures since AppInspect 4.4) → set
+`meta.supportedPythonVersion: ["3.13"]` (ucc-gen renders `python.required` into every stanza it
+generates) and patch any hand-written `package/default/*.conf` stanza in place. A **build-error
 no-progress breaker** stops the loop when a fix reports `changed: []` (no-op) AND the build
 fails again with the identical error. Every step is traced (SSE + JSONL) and rendered inline
 in the chat.

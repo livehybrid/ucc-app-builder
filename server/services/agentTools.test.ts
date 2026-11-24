@@ -262,6 +262,38 @@ describe('build_and_inspect', () => {
     expect(out).toContain('Package:');
   });
 
+  it('hands the loop a globalConfig with supportedPythonVersion ["3.13"] (python.required)', async () => {
+    loopMock.mockResolvedValue({
+      ok: true,
+      clean: true,
+      iterations: 1,
+      appId: 'TA_py',
+      files: [],
+      events: [],
+      finalSummary: 'clean',
+    });
+    const v = vfs({
+      'TA_py/globalConfig.json': JSON.stringify({
+        meta: { name: 'TA_py', supportedPythonVersion: ['3.9'] },
+      }),
+    });
+    const out = await buildAndInspect.execute({ appId: 'TA_py' }, v);
+    // Read what the loop (and so ucc-gen) was given, not the VFS the guard wrote.
+    const given = (
+      loopMock.mock.calls[loopMock.mock.calls.length - 1][0] as {
+        files: { path: string; content: string }[];
+      }
+    ).files;
+    const gc = given.filter((f) => f.path.endsWith('globalConfig.json'));
+    expect(gc).toHaveLength(1);
+    expect(JSON.parse(gc[0].content).meta).toEqual({
+      name: 'TA_py',
+      supportedPythonVersion: ['3.13'],
+      checkForUpdates: false,
+    });
+    expect(out).toContain('supportedPythonVersion');
+  });
+
   it('errors clearly when appId cannot be inferred', async () => {
     const out = await buildAndInspect.execute({}, vfs({ 'random.txt': 'x' }));
     expect(out).toMatch(/could not infer appId/i);

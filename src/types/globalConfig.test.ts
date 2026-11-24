@@ -13,6 +13,8 @@ describe('createGlobalConfig', () => {
     expect(config.meta.displayName).toBe('My App');
     expect(config.meta.version).toBe('1.0.0');
     expect(config.meta.schemaVersion).toBe('0.0.10');
+    // AppInspect 4.4 fails any python stanza without python.required = 3.13/3.14.
+    expect(JSON.parse(JSON.stringify(config)).meta.supportedPythonVersion).toEqual(['3.13']);
   });
 
   it('should create config without pages when no options enabled', () => {

@@ -72,7 +72,8 @@ SYSTEM_PROMPT = (
     "need with read_file and EXTEND that project in place. Only call create_addon when the "
     "project is EMPTY (no files) and the user wants a brand-new add-on.\n"
     "Author globalConfig.json with write_file (the core artifact - inputs, configuration, "
-    'UI; include "checkForUpdates": false in meta).\n'
+    'UI; include "checkForUpdates": false and "supportedPythonVersion": ["3.13"] in meta - '
+    "AppInspect fails any python stanza without python.required = 3.13).\n"
     "VALIDATE THE SCHEMA BEFORE YOU BUILD. After writing globalConfig.json, call "
     "validate_global_config - it checks the real ucc-framework schema in seconds, with no "
     "build. Only call build_and_inspect once it passes. Fix EXACTLY the paths it lists and "

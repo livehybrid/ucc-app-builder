@@ -409,7 +409,7 @@ export function renderBuildInstruction(spec: UccSpec): string {
   }
   lines.push('');
   lines.push(
-    'Author globalConfig.json (with "checkForUpdates": false in meta) to match this spec, then run build_and_inspect and self-correct until AppInspect-clean. Implement the collection logic in package/bin/ for each input.'
+    'Author globalConfig.json (with "checkForUpdates": false and "supportedPythonVersion": ["3.13"] in meta) to match this spec, then run build_and_inspect and self-correct until AppInspect-clean. Implement the collection logic in package/bin/ for each input.'
   );
   lines.push('');
   lines.push('--- APPROVED SPEC (JSON) ---');

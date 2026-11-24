@@ -20,6 +20,7 @@
 import type { VirtualFileSystem } from '../../src/lib/vfs.js';
 import { splunkMcp } from './splunkMcp.js';
 import { runAgentLoop, type LoopFile, type LoopEvent } from './agentLoop.js';
+import { REQUIRED_PYTHON_VERSIONS, supportedPythonCompliant } from './pythonRequired.js';
 import { buildInputScript, type InputScriptParam } from '../../src/lib/ai/tools/generateInputScript.js';
 import { appManifestFromGlobalConfig } from '../../src/lib/generator.js';
 
@@ -423,6 +424,30 @@ function ensureCheckForUpdatesDisabled(vfs: VirtualFileSystem): string | null {
   }
 }
 
+/**
+ * DETERMINISTIC SAFETY NET: set meta.supportedPythonVersion=["3.13"] before
+ * building when it is absent or lists a version AppInspect rejects (only 3.13/3.14 pass).
+ * AppInspect 4.4 FAILS every generated inputs/restmap/commands stanza without
+ * python.required, and ucc-gen renders python.required from this list. Returns
+ * the globalConfig path edited, or null if left alone.
+ */
+function ensureSupportedPythonVersion(vfs: VirtualFileSystem): string | null {
+  const gcEntry = vfs
+    .getAllFiles()
+    .find((f) => f.path.replace(/^\/+/, '').endsWith('globalConfig.json'));
+  if (!gcEntry) return null;
+  try {
+    const gc = JSON.parse(gcEntry.content);
+    if (supportedPythonCompliant(gc?.meta?.supportedPythonVersion)) return null;
+    gc.meta = gc.meta ?? {};
+    gc.meta.supportedPythonVersion = [...REQUIRED_PYTHON_VERSIONS];
+    vfs.writeFile(gcEntry.path, JSON.stringify(gc, null, 2), 'generated');
+    return gcEntry.path;
+  } catch {
+    return null;
+  }
+}
+
 export const buildAndInspect: ServerAgentTool = {
   name: 'build_and_inspect',
   description:
@@ -475,6 +500,8 @@ export const buildAndInspect: ServerAgentTool = {
     // meta.checkForUpdates=false up front so the loop never spends iteration 1
     // patching it.
     const checkForUpdatesPatched = ensureCheckForUpdatesDisabled(vfs);
+    // Same for python.required (AppInspect check_*_python_required).
+    const pythonRequiredPatched = ensureSupportedPythonVersion(vfs);
 
     const before = vfsToLoopFiles(vfs);
     const events: LoopEvent[] = [];
@@ -531,6 +558,10 @@ export const buildAndInspect: ServerAgentTool = {
         ? `\n\n🛠 Set meta.checkForUpdates=false in ${checkForUpdatesPatched} (AppInspect requires ` +
           `check_for_updates=false in app.conf; ucc-gen renders it from this flag).`
         : '';
+      const pythonRequiredNote = pythonRequiredPatched
+        ? `\n\n🛠 Set meta.supportedPythonVersion=["3.13"] in ${pythonRequiredPatched} (AppInspect ` +
+          `requires python.required = 3.13 or 3.14 on every python stanza; ucc-gen renders it from this list).`
+        : '';
       const autoStubNote = autoStubbed.length
         ? `\n\n🛠 Auto-generated ${autoStubbed.length} missing input handler script(s) ` +
           `(declared in globalConfig.json but absent from package/bin/):\n${autoStubbed
@@ -555,7 +586,7 @@ export const buildAndInspect: ServerAgentTool = {
         ? `\n\nThe loop changed ${changed.length} source file(s) in your VFS:\n${changed.map((c) => `  - ${c}`).join('\n')}`
         : '';
       const pkg = result.clean && !incomplete && result.tarball ? `\n\nPackage: ${result.tarball}` : '';
-      return `${header}${manifestNote}${checkForUpdatesNote}${autoStubNote}${cleanButIncompleteHint}${changedNote}${buildErrorNote}\n\n--- loop trace ---\n${trace}\n\n--- final report ---\n${
+      return `${header}${manifestNote}${checkForUpdatesNote}${pythonRequiredNote}${autoStubNote}${cleanButIncompleteHint}${changedNote}${buildErrorNote}\n\n--- loop trace ---\n${trace}\n\n--- final report ---\n${
         result.finalSummary ?? '(no summary)'
       }${pkg}`;
     } catch (e) {
