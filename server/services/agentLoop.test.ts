@@ -17,6 +17,10 @@ const buildSpy = vi.fn();
 // given log line, or null/undefined to let it succeed. Drains one per build; once
 // empty, builds succeed. Lets us simulate ucc-gen build failures deterministically.
 const buildBehavior: Array<Error | null> = [];
+// Every batch of files the loop writes to the ucc-gen workdir, one per iteration.
+// This is what ucc-gen actually builds from, and the fixers never read it back,
+// so asserting on it does not share a route with the code under test.
+const diskWrites: Array<Array<{ path: string; content: string }>> = [];
 
 function reportWith(checks: AppInspectCheck[]): AppInspectReport {
   return {
@@ -67,8 +71,8 @@ vi.mock('../utils/fileHandler.js', () => ({
     async createTempDirectory() {
       return '/tmp/work';
     }
-    async writeFiles() {
-      /* no-op */
+    async writeFiles(_dir: string, files: Array<{ path: string; content: string }>) {
+      diskWrites.push(files.map((f) => ({ ...f })));
     }
   },
 }));
@@ -102,6 +106,7 @@ const baseOpts = {
 beforeEach(() => {
   inspectQueue.length = 0;
   buildBehavior.length = 0;
+  diskWrites.length = 0;
   buildSpy.mockReset();
 });
 
@@ -389,5 +394,168 @@ describe('resolveInspectMaxIterations (env-var default)', () => {
     process.env.AGENT_INSPECT_MAX_ITERATIONS = '9';
     expect(resolveInspectMaxIterations()).toBe(9);
     expect(resolveInspectMaxIterations(2)).toBe(2); // explicit wins
+  });
+});
+
+// --- python.required (AppInspect 4.4: check_*_python_required are FAILURES) ---
+
+/** Tiny independent .conf reader: stanza -> key -> value. */
+function parseConf(text: string): Record<string, Record<string, string>> {
+  const out: Record<string, Record<string, string>> = {};
+  let cur: Record<string, string> | null = null;
+  for (const raw of text.split(/\r?\n/)) {
+    const line = raw.trim();
+    if (!line || line.startsWith('#')) continue;
+    const h = line.match(/^\[(.*)\]$/);
+    if (h) {
+      cur = out[h[1]] = out[h[1]] ?? {};
+      continue;
+    }
+    const eq = line.indexOf('=');
+    if (cur && eq > 0) cur[line.slice(0, eq).trim()] = line.slice(eq + 1).trim();
+  }
+  return out;
+}
+
+/** The file ucc-gen was handed on iteration N (1-based), by its exact path. */
+function writtenOnIteration(n: number, exactPath: string): string | undefined {
+  return diskWrites[n - 1]?.find((f) => f.path === exactPath)?.content;
+}
+
+const pyReq = (check: string, stanza: string, file: string, line = 1): AppInspectCheck => ({
+  check,
+  result: 'failure',
+  message: '',
+  description: '',
+  messages: [
+    {
+      message: `Stanza [${stanza}] does not define python.required. Update your app to be compatible with Python 3.13 or 3.14 and set python.required to "'3.13' or '3.14'".`,
+      message_filename: file,
+      message_line: line,
+    },
+  ],
+});
+
+describe('python.required rule', () => {
+  const GC = 'TA_test/globalConfig.json';
+  const gcMeta = { name: 'TA_test', restRoot: 'TA_test', version: '1.0.0', displayName: 'T' };
+
+  it('sets meta.supportedPythonVersion=["3.13"] for generated inputs/restmap stanzas and reaches CLEAN without the LLM', async () => {
+    // The exact pair loop-smoke hit on 17 Nov 2026 (both stanzas are ucc-gen generated).
+    inspectQueue.push(
+      reportWith([
+        pyReq('check_modular_inputs_python_required', 'demo_input', 'default/inputs.conf'),
+        pyReq(
+          'check_admin_external_restmap_conf_python_required',
+          'admin_external:TA_demo_forge_settings',
+          'default/restmap.conf',
+          9
+        ),
+      ]),
+      reportWith([])
+    );
+    const res = await runAgentLoop({
+      ...baseOpts,
+      files: [{ path: GC, content: JSON.stringify({ meta: gcMeta, pages: { x: 1 } }) }],
+      maxIterations: 4,
+    });
+
+    expect(res.clean).toBe(true);
+    expect(res.iterations).toBe(2);
+    // Whole globalConfig as ucc-gen received it on iteration 2: the new key and
+    // nothing else changed.
+    expect(JSON.parse(writtenOnIteration(2, GC)!)).toEqual({
+      meta: { ...gcMeta, supportedPythonVersion: ['3.13'] },
+      pages: { x: 1 },
+    });
+    // The sibling check is covered by the same globalConfig change; it must not be
+    // routed to the (paid) LLM path.
+    expect(res.events.some((e) => e.kind === 'fix_skipped')).toBe(false);
+  });
+
+  it('patches a hand-written commands.conf stanza ucc-gen does not generate', async () => {
+    const CMD = 'TA_test/package/default/commands.conf';
+    inspectQueue.push(
+      reportWith([pyReq('check_commands_conf_python_required', 'mycmd', 'default/commands.conf')]),
+      reportWith([])
+    );
+    const res = await runAgentLoop({
+      ...baseOpts,
+      files: [
+        { path: GC, content: JSON.stringify({ meta: gcMeta }) },
+        {
+          path: CMD,
+          content: '[mycmd]\nfilename = mycmd.py\nchunked = true\n\n[other]\nfilename = other.py\n',
+        },
+      ],
+      maxIterations: 4,
+    });
+
+    expect(res.clean).toBe(true);
+    const conf = parseConf(writtenOnIteration(2, CMD)!);
+    expect(conf).toEqual({
+      mycmd: {
+        filename: 'mycmd.py',
+        chunked: 'true',
+        'python.version': 'python3',
+        'python.required': '3.13',
+      },
+      other: { filename: 'other.py' },
+    });
+    expect(JSON.parse(writtenOnIteration(2, GC)!).meta.supportedPythonVersion).toEqual(['3.13']);
+  });
+
+  it('replaces python.required = 3.9 on a hand-written [script:...] restmap stanza', async () => {
+    const RM = 'TA_test/package/default/restmap.conf';
+    inspectQueue.push(
+      reportWith([
+        pyReq('check_script_restmap_conf_python_required', 'script:my_ep', 'default/restmap.conf'),
+      ]),
+      reportWith([])
+    );
+    const res = await runAgentLoop({
+      ...baseOpts,
+      files: [
+        {
+          path: GC,
+          content: JSON.stringify({ meta: { ...gcMeta, supportedPythonVersion: ['3.13'] } }),
+        },
+        {
+          path: RM,
+          content:
+            '[script:my_ep]\nmatch = /my_ep\nscript = my_ep.py\npython.version = python3\npython.required = 3.9\n',
+        },
+      ],
+      maxIterations: 4,
+    });
+
+    expect(res.clean).toBe(true);
+    expect(parseConf(writtenOnIteration(2, RM)!)['script:my_ep']).toEqual({
+      match: '/my_ep',
+      script: 'my_ep.py',
+      'python.version': 'python3',
+      'python.required': '3.13',
+    });
+  });
+
+  it('does not claim a fix when globalConfig is already compliant and the stanza is generated', async () => {
+    inspectQueue.push(
+      reportWith([
+        pyReq('check_modular_inputs_python_required', 'demo_input', 'default/inputs.conf'),
+      ])
+    );
+    const content = JSON.stringify({ meta: { ...gcMeta, supportedPythonVersion: ['3.13'] } });
+    const res = await runAgentLoop({
+      ...baseOpts,
+      files: [{ path: GC, content }],
+      maxIterations: 4,
+    });
+
+    expect(res.clean).toBe(false);
+    expect(res.events.some((e) => e.kind === 'fix' && /python_required/.test(e.message))).toBe(
+      false
+    );
+    expect(diskWrites).toHaveLength(1);
+    expect(writtenOnIteration(1, GC)).toBe(content);
   });
 });

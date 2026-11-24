@@ -87,6 +87,9 @@ Build in this exact order:
    (inputs, accounts, config tabs, validators). This is the primary thing you write.
    ALWAYS include `"checkForUpdates": false` in `meta` — AppInspect requires
    check_for_updates=false in app.conf and ucc-gen renders it from this flag.
+   ALWAYS include `"supportedPythonVersion": ["3.13"]` in `meta` too — AppInspect fails
+   every inputs/restmap/commands stanza without `python.required` (only 3.13 or 3.14 are
+   accepted, never 3.9) and ucc-gen renders `python.required` from this list.
 2. **Provide `package/app.manifest`.** It is REQUIRED — `ucc-gen` does NOT generate it,
    and the build fails outright without it. (If you forget, the builder auto-generates a
    valid one from your globalConfig metadata, but prefer to author it.) It MUST be strict

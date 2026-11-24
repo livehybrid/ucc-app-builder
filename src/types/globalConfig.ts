@@ -13,6 +13,7 @@ interface GlobalConfigMeta {
   schemaVersion: string;
   supportedThemes?: string[];
   checkForUpdates?: boolean;
+  supportedPythonVersion?: string[];
 }
 
 interface GlobalConfigPage {
@@ -282,6 +283,10 @@ export function createGlobalConfig(
       // in app.conf; ucc-gen renders that from this flag, so bake it in up front
       // rather than letting the AppInspect loop patch it on iteration 1.
       checkForUpdates: false,
+      // AppInspect (4.4+) FAILS every inputs/restmap/commands stanza without
+      // python.required (check_*_python_required). ucc-gen renders
+      // `python.required = <list>` into each generated stanza from this list.
+      supportedPythonVersion: ['3.13'],
     },
     pages: {},
   };

@@ -4,6 +4,12 @@ import { AppInspectService, AppInspectCheck, AppInspectReport } from './appInspe
 import { FileHandler } from '../utils/fileHandler.js';
 import { traceLogger } from './traceLogger.js';
 import { appManifestFromGlobalConfig } from '../../src/lib/generator.js';
+import {
+  REQUIRED_PYTHON_VERSIONS,
+  isPythonRequiredCheck,
+  setPythonRequiredInStanza,
+  supportedPythonCompliant,
+} from './pythonRequired.js';
 
 /**
  * The keystone agentic loop.
@@ -117,6 +123,14 @@ function toWorkPath(loopPath: string, appId: string): string | null {
 }
 
 /**
+ * Shared state for one fix round, so sibling checks in the same family do not
+ * each fall through to the (paid) LLM after the first one fixed the common cause.
+ */
+export interface FixRoundState {
+  pythonRequiredGlobalConfigSet?: boolean;
+}
+
+/**
  * Deterministic fixers for well-known AppInspect checks. These run before any
  * LLM call: they are free, instant, and reliable. Returns the set of files that
  * were changed (by their loop path).
@@ -124,10 +138,63 @@ function toWorkPath(loopPath: string, appId: string): string | null {
 function deterministicFix(
   check: AppInspectCheck,
   files: Map<string, string>,
-  appId: string
+  appId: string,
+  round: FixRoundState = {}
 ): { changed: string[]; note: string } | null {
   const findFile = (suffix: string): string | undefined =>
     [...files.keys()].find((k) => k.endsWith(suffix));
+
+  if (isPythonRequiredCheck(check.check)) {
+    // ucc-gen (6.6.1: create_inputs_conf / create_restmap_conf /
+    // create_commands_conf / create_alert_actions_conf) renders
+    // `python.required = <meta.supportedPythonVersion joined>` into every stanza
+    // it GENERATES, and rewrites those confs on each build, so the source fix is
+    // globalConfig. Stanzas the author hand-wrote under package/default/ (e.g.
+    // [script:...] in restmap.conf, a commands.conf with no customSearchCommands)
+    // are not generated, so patch those in place.
+    const changed: string[] = [];
+    const notes: string[] = [];
+    const gcKey = findFile('globalConfig.json');
+    if (gcKey) {
+      try {
+        const gc = JSON.parse(files.get(gcKey)!);
+        if (!supportedPythonCompliant(gc?.meta?.supportedPythonVersion)) {
+          gc.meta = gc.meta ?? {};
+          gc.meta.supportedPythonVersion = [...REQUIRED_PYTHON_VERSIONS];
+          files.set(gcKey, JSON.stringify(gc, null, 2));
+          changed.push(gcKey);
+          round.pythonRequiredGlobalConfigSet = true;
+          notes.push(
+            `Set meta.supportedPythonVersion=${JSON.stringify(REQUIRED_PYTHON_VERSIONS)} in globalConfig.json (ucc-gen renders python.required from it).`
+          );
+        }
+      } catch {
+        // unparseable globalConfig: leave it to the build-error fixers / LLM
+      }
+    }
+    for (const m of check.messages ?? []) {
+      const stanza = /Stanza \[([^\]]+)\]/.exec(m.message ?? '')?.[1];
+      const conf = (m.message_filename ?? '').replace(/^\/+/, '').replace(/^package\//, '');
+      if (!stanza || !/^default\/[^/]+\.conf$/.test(conf)) continue;
+      const key = [...files.keys()].find((k) => k.replace(/^\/+/, '').endsWith(`package/${conf}`));
+      if (!key) continue; // not hand-written: ucc-gen generates it from globalConfig
+      const next = setPythonRequiredInStanza(files.get(key)!, stanza);
+      if (next === null) continue;
+      files.set(key, next);
+      if (!changed.includes(key)) changed.push(key);
+      notes.push(
+        `Set python.required = ${REQUIRED_PYTHON_VERSIONS.join(', ')} in ${conf} [${stanza}].`
+      );
+    }
+    if (changed.length) return { changed, note: notes.join(' ') };
+    if (round.pythonRequiredGlobalConfigSet) {
+      return {
+        changed: [],
+        note: 'Covered by meta.supportedPythonVersion set this round (ucc-gen renders python.required into the generated stanza).',
+      };
+    }
+    return null;
+  }
 
   switch (check.check) {
     case 'check_for_updates_disabled': {
@@ -446,6 +513,10 @@ async function llmFix(
     '- To set check_for_updates=false (check_for_updates_disabled), set "meta": {"checkForUpdates": false} ' +
     'in globalConfig.json. UCC reads meta.checkForUpdates and renders app.conf accordingly.\n' +
     '- To set the add-on version, change meta.version in globalConfig.json (and info.id.version in app.manifest).\n' +
+    '- python.required (check_*_python_required): set "meta": {"supportedPythonVersion": ["3.13"]} in ' +
+    'globalConfig.json; UCC renders python.required into the inputs/restmap/commands stanzas it generates. ' +
+    'AppInspect accepts only 3.13 or 3.14 - never 3.9. For a stanza you hand-wrote under package/default/, ' +
+    'set python.version = python3 and python.required = 3.13 in that stanza.\n' +
     '- `inputs.conf`, `*.conf.spec`, `README/` and `appserver/static/js/build/` are UCC-generated; ' +
     'do not hand-edit them. Fix the cause in globalConfig.json or package/bin source.\n' +
     'For .conf files you legitimately own (custom conf), keep valid Splunk stanza syntax.';
@@ -744,8 +815,9 @@ export async function runAgentLoop(opts: LoopOptions): Promise<LoopResult> {
     // 4. Fix — deterministic rules first, collect what's left for the LLM.
     const changedThisRound = new Set<string>();
     const unresolved: AppInspectCheck[] = [];
+    const round: FixRoundState = {};
     for (const c of actionable) {
-      const det = llmOnly ? null : deterministicFix(c, files, appId);
+      const det = llmOnly ? null : deterministicFix(c, files, appId, round);
       if (det) {
         det.changed.forEach((k) => changedThisRound.add(k));
         emit('fix', iteration, `[rule] ${c.check}: ${det.note}`, { changed: det.changed });

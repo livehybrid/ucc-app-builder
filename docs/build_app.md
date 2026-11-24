@@ -99,6 +99,10 @@ The fixers are grounded in real `ucc-gen` semantics, e.g.:
 - missing `pages.inputs.table` → synthesise it from the service's entities.
 - missing `package/app.manifest` → generate it from globalConfig metadata.
 - `check_aarch64_compatibility` → pin `solnlib < 8` (see dependency pins below).
+- `check_*_python_required` (inputs, restmap admin_external/script, commands) → set
+  `meta.supportedPythonVersion = ["3.13"]` in **`globalConfig.json`**; ucc-gen renders
+  `python.required = 3.13` into the stanzas it generates. Hand-written `package/default/*.conf`
+  stanzas get `python.version = python3` and `python.required = 3.13` patched in place.
 
 A **no-progress breaker** stops the loop the moment a fix changes nothing AND the build
 fails again with the identical error - so it never grinds to the iteration cap (or burns
